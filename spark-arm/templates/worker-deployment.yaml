@@ -18,6 +18,10 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
       {{- end }}
+      volumes:
+        - name: spark-logs
+          persistentVolumeClaim:
+            claimName: spark-logs-pvc
       containers:
         - name: spark
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -26,18 +30,46 @@ spec:
             - name: SPARK_HOME
               value: /opt/spark
             - name: SPARK_MASTER_HOST
-              value: spark-arm
+              value: spark-master
             - name: SPARK_MASTER_PORT
               value: "{{ .Values.service.port }}"
             - name: SPARK_WORKER_CORES
               value: "{{ .Values.worker.cores }}"
             - name: SPARK_WORKER_MEMORY
               value: "{{ .Values.worker.memory }}"
+            - name: SPARK_LOCAL_HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SPARK_PUBLIC_DNS
+              value: spark-worker
           command:
-            - "/opt/spark/sbin/start-worker.sh"
-            - "spark://spark-arm:{{ .Values.service.port }}"
+            - "/start-worker.sh"
           ports:
             - containerPort: 8081
               name: webui
+          volumeMounts:
+            - name: spark-logs
+              mountPath: /opt/spark/logs
           resources:
-            {{- toYaml .Values.worker.resources | nindent 12 }} 
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+          startupProbe:
+            tcpSocket:
+              port: webui
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: webui
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: webui
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3 

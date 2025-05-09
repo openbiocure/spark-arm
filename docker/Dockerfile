@@ -5,7 +5,9 @@ FROM arm64v8/openjdk:17-slim
 ENV SPARK_VERSION=3.5.1 \
     HADOOP_VERSION=3 \
     SPARK_HOME=/opt/spark \
-    PATH=${PATH}:/opt/spark/bin:/opt/spark/sbin
+    HADOOP_HOME=/opt/hadoop \
+    PATH=${PATH}:/opt/spark/bin:/opt/spark/sbin \
+    LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/hadoop/lib/native
 
 # Install necessary dependencies
 RUN apt-get update && \
@@ -14,8 +16,20 @@ RUN apt-get update && \
     tar \
     bash \
     procps \
-    tini && \
-    rm -rf /var/lib/apt/lists/*
+    tini \
+    build-essential \
+    zlib1g-dev \
+    libssl-dev \
+    libsnappy-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install Hadoop native libraries for ARM64
+RUN mkdir -p ${HADOOP_HOME} && \
+    curl -fSL "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.2/lib/native/libhadoop.so.1.0.0" -o ${HADOOP_HOME}/libhadoop.so.1.0.0 && \
+    curl -fSL "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.2/lib/native/libsnappy.so.1.1.4" -o ${HADOOP_HOME}/libsnappy.so.1.1.4 && \
+    mkdir -p ${HADOOP_HOME}/lib/native && \
+    ln -s ${HADOOP_HOME}/libhadoop.so.1.0.0 ${HADOOP_HOME}/lib/native/libhadoop.so && \
+    ln -s ${HADOOP_HOME}/libsnappy.so.1.1.4 ${HADOOP_HOME}/lib/native/libsnappy.so
 
 # Download and install Spark
 RUN curl -fSL "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" -o /tmp/spark.tgz && \
@@ -40,6 +54,8 @@ set -e
 echo "=== Starting Spark Master ==="
 echo "SPARK_HOME: $SPARK_HOME"
 echo "PATH: $PATH"
+echo "HADOOP_HOME: $HADOOP_HOME"
+echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 
 # Start the Spark master
 /opt/spark/sbin/start-master.sh --host $(hostname) --port 7077 --webui-port 8080
@@ -63,6 +79,8 @@ set -e
 echo "=== Starting Spark Worker ==="
 echo "SPARK_HOME: $SPARK_HOME"
 echo "PATH: $PATH"
+echo "HADOOP_HOME: $HADOOP_HOME"
+echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
 echo "SPARK_MASTER_HOST: $SPARK_MASTER_HOST"
 echo "SPARK_MASTER_PORT: $SPARK_MASTER_PORT"
 echo "SPARK_WORKER_CORES: $SPARK_WORKER_CORES"

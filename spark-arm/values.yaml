@@ -4,8 +4,8 @@ replicaCount: 1 # Single master node
 # Image configuration
 image:
   repository: openbiocure/spark-arm
-  tag: v0.2
-  pullPolicy: Always
+  tag: v0.3
+  pullPolicy: IfNotPresent
 
 # Service configuration
 service:
@@ -13,27 +13,32 @@ service:
   port: 7077
   uiPort: 8080
 
+# Storage configuration
+storage:
+  className: local-path
+  size: 10Gi
+
 # Worker configuration
 worker:
-  replicaCount: 2
+  replicaCount: 2 # Ensuring 2 worker replicas
   cores: "2"
-  memory: "2g"
+  memory: "2048m"
   resources:
     limits:
-      cpu: 2000m
-      memory: 2560Mi
+      cpu: "2"
+      memory: "2Gi"
     requests:
-      cpu: 1000m
-      memory: 2048Mi
+      cpu: "1"
+      memory: "1Gi"
 
 # Resource limits and requests for master
 resources:
   limits:
-    cpu: 2000m
-    memory: 2048Mi
+    cpu: "2"
+    memory: "2Gi"
   requests:
-    cpu: 1000m
-    memory: 1536Mi
+    cpu: "1"
+    memory: "1Gi"
 
 # ServiceAccount configuration
 serviceAccount:

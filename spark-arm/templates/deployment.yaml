@@ -17,6 +17,10 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
       {{- end }}
+      volumes:
+        - name: spark-logs
+          persistentVolumeClaim:
+            claimName: spark-logs-pvc
       containers:
         - name: spark
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -29,14 +33,21 @@ spec:
             - name: SPARK_MASTER_WEBUI_PORT
               value: "{{ .Values.service.uiPort }}"
             - name: SPARK_MASTER_HOST
+              value: spark-master
+            - name: SPARK_LOCAL_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            - name: SPARK_PUBLIC_DNS
+              value: spark-master
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark
             - containerPort: {{ .Values.service.uiPort }}
               name: webui
+          volumeMounts:
+            - name: spark-logs
+              mountPath: /opt/spark/logs
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           startupProbe:
