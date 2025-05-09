@@ -3,11 +3,11 @@ FROM arm64v8/openjdk:17-slim
 
 # Set Spark and Hadoop versions
 ENV SPARK_VERSION=3.5.1 \
-    HADOOP_VERSION=3 \
+    HADOOP_VERSION=3.3.6 \
     SPARK_HOME=/opt/spark \
     HADOOP_HOME=/opt/hadoop \
     PATH=${PATH}:/opt/spark/bin:/opt/spark/sbin \
-    LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/hadoop/lib/native
+    LD_LIBRARY_PATH=/opt/hadoop/lib/native
 
 # Install necessary dependencies
 RUN apt-get update && \
@@ -21,15 +21,24 @@ RUN apt-get update && \
     zlib1g-dev \
     libssl-dev \
     libsnappy-dev \
+    cmake \
+    pkg-config \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Hadoop native libraries for ARM64
+# Download and build Hadoop native libraries
 RUN mkdir -p ${HADOOP_HOME} && \
-    curl -fSL "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.2/lib/native/libhadoop.so.1.0.0" -o ${HADOOP_HOME}/libhadoop.so.1.0.0 && \
-    curl -fSL "https://github.com/cdarlint/winutils/raw/master/hadoop-3.2.2/lib/native/libsnappy.so.1.1.4" -o ${HADOOP_HOME}/libsnappy.so.1.1.4 && \
+    curl -fSL "https://downloads.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}-src.tar.gz" -o /tmp/hadoop-src.tar.gz && \
+    tar -xf /tmp/hadoop-src.tar.gz -C /tmp && \
+    cd /tmp/hadoop-${HADOOP_VERSION}-src/hadoop-tools/hadoop-pipes && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make && \
     mkdir -p ${HADOOP_HOME}/lib/native && \
-    ln -s ${HADOOP_HOME}/libhadoop.so.1.0.0 ${HADOOP_HOME}/lib/native/libhadoop.so && \
-    ln -s ${HADOOP_HOME}/libsnappy.so.1.1.4 ${HADOOP_HOME}/lib/native/libsnappy.so
+    cp /tmp/hadoop-${HADOOP_VERSION}-src/hadoop-tools/hadoop-pipes/build/lib/* ${HADOOP_HOME}/lib/native/ && \
+    cd / && \
+    rm -rf /tmp/hadoop-src.tar.gz /tmp/hadoop-${HADOOP_VERSION}-src
 
 # Download and install Spark
 RUN curl -fSL "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" -o /tmp/spark.tgz && \
