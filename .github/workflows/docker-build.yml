@@ -2,15 +2,11 @@ name: Build and Push ARM64 Docker Image
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'docker/**'
-      - '.github/workflows/docker-build.yml'
+    branches:
+      - '**'
   pull_request:
-    branches: [ main ]
-    paths:
-      - 'docker/**'
-      - '.github/workflows/docker-build.yml'
+    branches:
+      - '**'
 
 env:
   REGISTRY: ghcr.io
