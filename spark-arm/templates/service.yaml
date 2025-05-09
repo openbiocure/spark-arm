@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-master
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: spark-master
+  ports:
+    - name: spark
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+    - name: webui
+      port: {{ .Values.service.uiPort }}
+      targetPort: {{ .Values.service.uiPort }}

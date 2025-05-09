@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-worker
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+    app: spark-worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      app: spark-worker
+  template:
+    metadata:
+      labels:
+        app: spark-worker
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
+      {{- end }}
+      containers:
+        - name: spark
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SPARK_HOME
+              value: /opt/spark
+            - name: SPARK_MASTER_HOST
+              value: spark-arm
+            - name: SPARK_MASTER_PORT
+              value: "{{ .Values.service.port }}"
+            - name: SPARK_WORKER_CORES
+              value: "{{ .Values.worker.cores }}"
+            - name: SPARK_WORKER_MEMORY
+              value: "{{ .Values.worker.memory }}"
+          command:
+            - "/opt/spark/sbin/start-worker.sh"
+            - "spark://spark-arm:{{ .Values.service.port }}"
+          ports:
+            - containerPort: 8081
+              name: webui
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }} 

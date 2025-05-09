@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-master
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: spark-master
+  template:
+    metadata:
+      labels:
+        app: spark-master
+    spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
+      {{- end }}
+      containers:
+        - name: spark
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SPARK_HOME
+              value: /opt/spark
+            - name: SPARK_MASTER_PORT
+              value: "{{ .Values.service.port }}"
+            - name: SPARK_MASTER_WEBUI_PORT
+              value: "{{ .Values.service.uiPort }}"
+            - name: SPARK_MASTER_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: spark
+            - containerPort: {{ .Values.service.uiPort }}
+              name: webui
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            tcpSocket:
+              port: webui
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: webui
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: webui
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
