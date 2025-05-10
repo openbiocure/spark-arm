@@ -1,19 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: spark-worker
+  name: {{ include "spark-arm.fullname" . }}-worker
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "spark-arm.labels" . | nindent 4 }}
-    app: spark-worker
+    app.kubernetes.io/component: worker
 spec:
   replicas: {{ .Values.worker.replicaCount }}
   selector:
     matchLabels:
-      app: spark-worker
+      {{- include "spark-arm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
   template:
     metadata:
       labels:
-        app: spark-worker
+        {{- include "spark-arm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
     spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
@@ -21,30 +24,27 @@ spec:
       volumes:
         - name: spark-logs
           persistentVolumeClaim:
-            claimName: spark-logs-pvc
+            claimName: {{ include "spark-arm.fullname" . }}-logs
       containers:
         - name: spark
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            {{- with .Values.worker.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
             - name: SPARK_HOME
               value: /opt/spark
+            - name: SPARK_NODE_TYPE
+              value: "worker"
             - name: SPARK_MASTER_HOST
-              value: spark-master
-            - name: SPARK_MASTER_PORT
-              value: "{{ .Values.service.port }}"
-            - name: SPARK_WORKER_CORES
-              value: "{{ .Values.worker.cores }}"
-            - name: SPARK_WORKER_MEMORY
-              value: "{{ .Values.worker.memory }}"
+              value: "spark-master"
             - name: SPARK_LOCAL_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
-              value: spark-worker
-          command:
-            - "/start-worker.sh"
+              value: {{ include "spark-arm.fullname" . }}-worker
           ports:
             - containerPort: 8081
               name: webui

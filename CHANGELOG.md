@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Traefik ingress support with configurable options
+  - SSL/TLS support
+  - Basic authentication middleware
+  - CORS middleware
+  - Rate limiting middleware
 - GitHub Actions workflow for automated ARM64 container builds
 - Container publishing to GitHub Container Registry (ghcr.io/openbiocure)
 - Compile Hadoop native libraries from source for ARM64

@@ -1,5 +1,39 @@
+# Release name and namespace
+nameOverride: ""
+fullnameOverride: ""
+namespace: spark
+
 # Master configuration
-replicaCount: 1 # Single master node
+master:
+  enabled: true
+  resources:
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+  env:
+    SPARK_MASTER_PORT: "7077"
+    SPARK_MASTER_WEBUI_PORT: "8080"
+
+# Worker configuration
+worker:
+  enabled: true
+  replicaCount: 2
+  cores: "2"
+  memory: "2048m"
+  resources:
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+    requests:
+      cpu: "1"
+      memory: "1Gi"
+  env:
+    SPARK_MASTER_PORT: "7077"
+    SPARK_WORKER_CORES: "2"
+    SPARK_WORKER_MEMORY: "2048m"
 
 # Image configuration
 image:
@@ -17,28 +51,7 @@ service:
 storage:
   className: local-path
   size: 10Gi
-
-# Worker configuration
-worker:
-  replicaCount: 2 # Ensuring 2 worker replicas
-  cores: "2"
-  memory: "2048m"
-  resources:
-    limits:
-      cpu: "2"
-      memory: "2Gi"
-    requests:
-      cpu: "1"
-      memory: "1Gi"
-
-# Resource limits and requests for master
-resources:
-  limits:
-    cpu: "2"
-    memory: "2Gi"
-  requests:
-    cpu: "1"
-    memory: "1Gi"
+  accessMode: ReadWriteOnce
 
 # ServiceAccount configuration
 serviceAccount:
@@ -50,14 +63,46 @@ serviceAccount:
 # Ingress configuration
 ingress:
   enabled: false
-  className: ""
-  annotations: {}
+  className: "traefik"
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: "websecure"
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    kubernetes.io/ingress.class: traefik
   hosts:
-    - host: ""
+    - host: "spark.cluster.local"
       paths:
         - path: /
           pathType: Prefix
-  tls: []
+
+# Traefik specific configuration
+traefik:
+  enabled: true
+  dashboard:
+    enabled: true
+    domain: "spark-dashboard.cluster.local"
+  ssl:
+    enabled: true
+    existingSecret: ""
+    createSecret: false
+    cert: ""
+    key: ""
+    certManager:
+      enabled: true
+      issuerName: "letsencrypt-prod"
+      issuerKind: "ClusterIssuer"
+  middlewares:
+    auth:
+      enabled: false
+      type: "basicAuth"
+      users: []
+    cors:
+      enabled: false
+      allowedOrigins: ["*"]
+      allowedMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    rateLimit:
+      enabled: false
+      average: 100
+      burst: 50
 
 # Autoscaling configuration
 autoscaling:

@@ -1,18 +1,23 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: spark-master
+  name: {{ include "spark-arm.fullname" . }}-master
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "spark-arm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: master
 spec:
-  replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "spark-arm.fullname" . }}-master
+  replicas: 1
   selector:
     matchLabels:
-      app: spark-master
+      {{- include "spark-arm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: master
   template:
     metadata:
       labels:
-        app: spark-master
+        {{- include "spark-arm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: master
     spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
@@ -20,26 +25,27 @@ spec:
       volumes:
         - name: spark-logs
           persistentVolumeClaim:
-            claimName: spark-logs-pvc
+            claimName: {{ include "spark-arm.fullname" . }}-logs
       containers:
         - name: spark
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            {{- with .Values.master.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
             - name: SPARK_HOME
               value: /opt/spark
-            - name: SPARK_MASTER_PORT
-              value: "{{ .Values.service.port }}"
-            - name: SPARK_MASTER_WEBUI_PORT
-              value: "{{ .Values.service.uiPort }}"
+            - name: SPARK_NODE_TYPE
+              value: "master"
             - name: SPARK_MASTER_HOST
-              value: spark-master
+              value: "spark-master"
             - name: SPARK_LOCAL_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
-              value: spark-master
+              value: {{ include "spark-arm.fullname" . }}-master
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark
@@ -49,7 +55,7 @@ spec:
             - name: spark-logs
               mountPath: /opt/spark/logs
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            {{- toYaml .Values.master.resources | nindent 12 }}
           startupProbe:
             tcpSocket:
               port: webui
