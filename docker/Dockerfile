@@ -1,31 +1,19 @@
 # Build stage for Hadoop native libraries
-FROM arm64v8/openjdk:17-slim AS hadoop-builder
+FROM eclipse-temurin:17-jdk-jammy as hadoop-builder
 
-# Set Hadoop version
+# Set environment variables
 ENV HADOOP_VERSION=3.3.6
 
 # Install build dependencies
-RUN apt-get update && \
-    apt-get install -y \
+RUN apt-get update && apt-get install -y \
     build-essential \
-    zlib1g-dev \
-    libssl-dev \
-    libsnappy-dev \
     cmake \
-    pkg-config \
+    curl \
     git \
-    libprotobuf-dev \
-    protobuf-compiler \
+    libssl-dev \
     maven \
-    autoconf \
-    libtool \
-    automake \
-    bison \
-    flex \
-    libkrb5-dev \
-    libbz2-dev \
-    liblz4-dev \
-    libzstd-dev \
+    pkg-config \
+    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Build Hadoop native libraries
@@ -39,54 +27,45 @@ RUN mkdir -p /opt/hadoop/lib/native && \
     rm -rf /tmp/hadoop-src.tar.gz /tmp/hadoop-${HADOOP_VERSION}-src
 
 # Final stage
-FROM arm64v8/openjdk:17-slim
+FROM eclipse-temurin:17-jdk-jammy
 
 # Set environment variables
-ENV SPARK_VERSION=3.5.1 \
-    HADOOP_VERSION=3.3.6 \
-    SPARK_HOME=/opt/spark \
-    HADOOP_HOME=/opt/hadoop \
-    PATH=${PATH}:/opt/spark/bin:/opt/spark/sbin \
-    LD_LIBRARY_PATH=/opt/hadoop/lib/native \
-    LOG_LEVEL=1 \
-    SPARK_NODE_TYPE=master
+ENV SPARK_VERSION=3.5.1
+ENV HADOOP_VERSION=3.3.6
+ENV SPARK_HOME=/opt/spark
+ENV PATH=$PATH:$SPARK_HOME/bin
+ENV HADOOP_HOME=/opt/hadoop
+ENV LD_LIBRARY_PATH=$HADOOP_HOME/lib/native:$LD_LIBRARY_PATH
 
-# Install runtime dependencies
-RUN apt-get update && \
-    apt-get install -y \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
     curl \
-    tar \
-    bash \
+    netcat-openbsd \
     procps \
     tini \
-    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories
-RUN mkdir -p ${SPARK_HOME}/scripts ${SPARK_HOME}/logs ${HADOOP_HOME}/lib/native
-
-# Copy scripts
-COPY scripts/start-master.sh scripts/start-worker.sh scripts/logging.sh scripts/start-spark.sh ${SPARK_HOME}/scripts/
-RUN chmod +x ${SPARK_HOME}/scripts/*.sh
+RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native
 
 # Copy Hadoop native libraries from builder stage
 COPY --from=hadoop-builder /opt/hadoop/lib/native ${HADOOP_HOME}/lib/native/
 
 # Download and install Spark
-RUN curl -fSL "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" -o /tmp/spark.tgz && \
-    tar -xf /tmp/spark.tgz -C /opt/ && \
-    mv /opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}/* ${SPARK_HOME}/ && \
-    rm /tmp/spark.tgz && \
-    chmod +x ${SPARK_HOME}/sbin/start-master.sh && \
-    chmod +x ${SPARK_HOME}/sbin/start-worker.sh
+RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" -o /tmp/spark.tgz && \
+    tar -xf /tmp/spark.tgz -C /opt && \
+    mv /opt/spark-${SPARK_VERSION}-bin-hadoop3/* ${SPARK_HOME} && \
+    rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3
 
-# Set the working directory
-WORKDIR $SPARK_HOME
+# Copy scripts
+COPY scripts/ ${SPARK_HOME}/scripts/
+RUN chmod +x ${SPARK_HOME}/scripts/*.sh
 
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+# Set working directory
+WORKDIR ${SPARK_HOME}
 
 # Use tini as init process
 ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Default command
 CMD ["/opt/spark/scripts/start-spark.sh"] 
