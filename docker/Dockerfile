@@ -3,28 +3,19 @@ FROM eclipse-temurin:17-jdk-jammy AS hadoop-builder
 
 # Set environment variables
 ENV HADOOP_VERSION=3.3.6
+ENV MAVEN_OPTS="-Dmaven.repo.local=/root/.m2/repository"
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
     curl \
-    git \
-    libssl-dev \
-    maven \
-    pkg-config \
-    zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Build Hadoop native libraries
+# Download pre-built Hadoop binary
 RUN mkdir -p /opt/hadoop/lib/native && \
-    curl -fSL "https://downloads.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}-src.tar.gz" -o /tmp/hadoop-src.tar.gz && \
-    tar -xf /tmp/hadoop-src.tar.gz -C /tmp && \
-    cd /tmp/hadoop-${HADOOP_VERSION}-src && \
-    mvn clean package -Pdist,native -DskipTests -Dtar -Dmaven.javadoc.skip=true && \
-    cp /tmp/hadoop-${HADOOP_VERSION}-src/hadoop-dist/target/hadoop-${HADOOP_VERSION}/lib/native/* /opt/hadoop/lib/native/ && \
-    cd / && \
-    rm -rf /tmp/hadoop-src.tar.gz /tmp/hadoop-${HADOOP_VERSION}-src
+    curl -fSL "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" -o /tmp/hadoop.tar.gz && \
+    tar -xf /tmp/hadoop.tar.gz -C /tmp && \
+    cp /tmp/hadoop-${HADOOP_VERSION}/lib/native/* /opt/hadoop/lib/native/ && \
+    rm -rf /tmp/hadoop.tar.gz /tmp/hadoop-${HADOOP_VERSION}
 
 # Final stage
 FROM eclipse-temurin:17-jdk-jammy
