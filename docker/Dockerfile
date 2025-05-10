@@ -1,5 +1,5 @@
 # Build stage for Hadoop native libraries
-FROM eclipse-temurin:17-jdk-jammy as hadoop-builder
+FROM eclipse-temurin:17-jdk-jammy AS hadoop-builder
 
 # Set environment variables
 ENV HADOOP_VERSION=3.3.6
