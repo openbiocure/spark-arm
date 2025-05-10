@@ -3,7 +3,6 @@ FROM eclipse-temurin:17-jdk-jammy AS hadoop-builder
 
 # Set environment variables
 ENV HADOOP_VERSION=3.3.6
-ENV MAVEN_OPTS="-Dmaven.repo.local=/root/.m2/repository"
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
