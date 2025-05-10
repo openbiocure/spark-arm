@@ -48,7 +48,7 @@ RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPA
     rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3
 
 # Copy scripts
-COPY scripts/ ${SPARK_HOME}/scripts/
+COPY docker/scripts/ ${SPARK_HOME}/scripts/
 RUN chmod +x ${SPARK_HOME}/scripts/*.sh
 
 # Set working directory
