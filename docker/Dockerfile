@@ -27,6 +27,7 @@ ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin
 ENV HADOOP_HOME=/opt/hadoop
 ENV LD_LIBRARY_PATH=/opt/hadoop/lib/native
+ENV SPARK_CLASSPATH=/opt/spark/jars/*
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -64,19 +65,27 @@ RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPA
     mv /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13/* ${SPARK_HOME} && \
     rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13
 
-# Download Delta Lake dependencies with error handling
+# Download Delta Lake and S3A dependencies
 RUN for jar in \
     "delta-core_2.13/${DELTA_VERSION}/delta-core_2.13-${DELTA_VERSION}.jar" \
     "delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar" \
     "delta-hive_2.13/${DELTA_VERSION}/delta-hive_2.13-${DELTA_VERSION}.jar" \
     "delta-standalone_2.13/${DELTA_VERSION}/delta-standalone_2.13-${DELTA_VERSION}.jar" \
-    "delta-contribs_2.13/${DELTA_VERSION}/delta-contribs_2.13-${DELTA_VERSION}.jar"; do \
+    "delta-contribs_2.13/${DELTA_VERSION}/delta-contribs_2.13-${DELTA_VERSION}.jar" \
+    "hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar" \
+    "aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar"; do \
     echo "Downloading $jar" && \
-    curl -fSL "https://dlcdn.apache.org/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
     curl -fSL "https://repo1.maven.org/maven2/io/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
-    curl -fSL "https://packages.confluent.io/maven/io/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
+    curl -fSL "https://repo1.maven.org/maven2/org/apache/hadoop/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
+    curl -fSL "https://repo1.maven.org/maven2/com/amazonaws/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
     (echo "Failed to download $jar" && exit 1); \
 done
+
+# Create spark-defaults.conf with necessary configurations
+RUN echo "spark.driver.extraClassPath /opt/spark/jars/*" > ${SPARK_HOME}/conf/spark-defaults.conf && \
+    echo "spark.executor.extraClassPath /opt/spark/jars/*" >> ${SPARK_HOME}/conf/spark-defaults.conf && \
+    echo "spark.sql.extensions io.delta.sql.DeltaSparkSessionExtension" >> ${SPARK_HOME}/conf/spark-defaults.conf && \
+    echo "spark.sql.catalog.spark_catalog org.apache.spark.sql.delta.catalog.DeltaCatalog" >> ${SPARK_HOME}/conf/spark-defaults.conf
 
 # Copy scripts
 COPY docker/scripts/ ${SPARK_HOME}/scripts/

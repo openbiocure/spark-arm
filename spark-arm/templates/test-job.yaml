@@ -1,0 +1,46 @@
+{{- if .Values.test.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spark-test-job
+  namespace: spark
+spec:
+  template:
+    spec:
+      containers:
+      - name: spark-test
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command: 
+        - python3
+        - /opt/spark/tests/test_spark_cluster.py
+        env:
+        - name: SPARK_MASTER_URL
+          value: spark://spark-arm-master:7077
+        - name: MINIO_ENDPOINT
+          value: "{{ .Values.minio.endpoint }}"
+        - name: MINIO_ACCESS_KEY
+          value: "{{ .Values.minio.credentials.accessKey }}"
+        - name: MINIO_SECRET_KEY
+          value: "{{ .Values.minio.credentials.secretKey }}"
+        - name: MINIO_BUCKET
+          value: "{{ .Values.minio.bucket }}"
+        - name: POSTGRES_HOST
+          value: "{{ .Values.hive.metastore.host }}"
+        - name: POSTGRES_PORT
+          value: {{ .Values.hive.metastore.port | quote }}
+        - name: POSTGRES_DB
+          value: "{{ .Values.hive.metastore.database }}"
+        - name: POSTGRES_USER
+          value: "{{ .Values.hive.metastore.username }}"
+        - name: POSTGRES_PASSWORD
+          value: "{{ .Values.hive.metastore.password }}"
+        volumeMounts:
+        - name: test-scripts
+          mountPath: /opt/spark/tests
+      volumes:
+      - name: test-scripts
+        configMap:
+          name: spark-test-scripts
+      restartPolicy: {{ .Values.test.job.restartPolicy }}
+  backoffLimit: {{ .Values.test.job.backoffLimit }}
+{{- end }} 

@@ -60,9 +60,21 @@ test:
 	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE) --timeout=300s
 
 # Run comprehensive cluster tests
-test-cluster: export-env test
-	@echo "Running Spark cluster tests..."
-	@cd tests && ./run_test.sh
+test-cluster:
+	@echo "Running tests in the cluster..."
+	@helm upgrade --install spark-arm ./spark-arm \
+		--namespace spark \
+		--set minio.endpoint="${MINIO_ENDPOINT}" \
+		--set minio.credentials.accessKey="${MINIO_ACCESS_KEY}" \
+		--set minio.credentials.secretKey="${MINIO_SECRET_KEY}" \
+		--set minio.bucket="${MINIO_BUCKET:-spark-data}" \
+		--set hive.metastore.host="${POSTGRES_HOST}" \
+		--set hive.metastore.port="${POSTGRES_PORT:-5432}" \
+		--set hive.metastore.database="${POSTGRES_DB:-hive}" \
+		--set hive.metastore.username="${POSTGRES_USER}" \
+		--set hive.metastore.password="${POSTGRES_PASSWORD}"
+	@kubectl wait --for=condition=complete job/spark-test-job -n spark --timeout=300s
+	@kubectl logs -n spark -l job-name=spark-test-job --tail=-1
 
 # Build, push and deploy
 all: build push deploy
@@ -88,11 +100,3 @@ port-forward: export-env
 	@echo "- Master: localhost:7077"
 	@echo "- UI: http://localhost:8080"
 	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080
-
-# Initialize OpenCert
-opencert-init:
-	@echo "Initializing OpenCert"
-	# Implementation of opencert-init command
-
-# Initialize other targets
-# ... existing code ... 

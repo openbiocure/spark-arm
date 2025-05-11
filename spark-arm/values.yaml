@@ -3,6 +3,13 @@ nameOverride: ""
 fullnameOverride: ""
 namespace: spark
 
+# Test job configuration
+test:
+  enabled: false # Set to true only when running tests
+  job:
+    backoffLimit: 1
+    restartPolicy: Never
+
 # MinIO configuration
 minio:
   enabled: true
