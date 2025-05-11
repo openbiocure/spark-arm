@@ -64,12 +64,19 @@ RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPA
     mv /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13/* ${SPARK_HOME} && \
     rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13
 
-# Download Delta Lake dependencies (3.3.1)
-RUN curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-core_2.13/${DELTA_VERSION}/delta-core_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-core.jar && \
-    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-storage.jar && \
-    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-hive_2.13/${DELTA_VERSION}/delta-hive_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-hive.jar && \
-    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-standalone_2.13/${DELTA_VERSION}/delta-standalone_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-standalone.jar && \
-    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-contribs_2.13/${DELTA_VERSION}/delta-contribs_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-contribs.jar
+# Download Delta Lake dependencies with error handling
+RUN for jar in \
+    "delta-core_2.13/${DELTA_VERSION}/delta-core_2.13-${DELTA_VERSION}.jar" \
+    "delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar" \
+    "delta-hive_2.13/${DELTA_VERSION}/delta-hive_2.13-${DELTA_VERSION}.jar" \
+    "delta-standalone_2.13/${DELTA_VERSION}/delta-standalone_2.13-${DELTA_VERSION}.jar" \
+    "delta-contribs_2.13/${DELTA_VERSION}/delta-contribs_2.13-${DELTA_VERSION}.jar"; do \
+    echo "Downloading $jar" && \
+    curl -fSL "https://dlcdn.apache.org/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
+    curl -fSL "https://repo1.maven.org/maven2/io/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
+    curl -fSL "https://packages.confluent.io/maven/io/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
+    (echo "Failed to download $jar" && exit 1); \
+done
 
 # Copy scripts
 COPY docker/scripts/ ${SPARK_HOME}/scripts/
