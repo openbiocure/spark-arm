@@ -20,8 +20,8 @@ RUN mkdir -p /opt/hadoop/lib/native && \
 FROM eclipse-temurin:17-jdk-jammy
 
 # Set environment variables
-# Using Spark 3.5.0 with Delta Lake 3.0.0 for latest features
-ENV SPARK_VERSION=3.5.0
+# Using Spark 3.5.3 with Delta Lake 3.0.0 for latest features
+ENV SPARK_VERSION=3.5.3
 ENV HADOOP_VERSION=3.3.6
 ENV DELTA_VERSION=3.0.0
 ENV AWS_SDK_VERSION=1.12.262
@@ -38,23 +38,7 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     procps \
     tini \
-    python3 \
-    python3-pip \
-    python3-venv \
     && rm -rf /var/lib/apt/lists/*
-
-# Set Python environment variables
-ENV PYTHONPATH=/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip
-ENV PYSPARK_PYTHON=python3
-ENV PYSPARK_DRIVER_PYTHON=python3
-
-# Install Python dependencies
-RUN pip3 install --no-cache-dir \
-    pyspark==${SPARK_VERSION} \
-    delta-spark==${DELTA_VERSION} \
-    pyarrow \
-    pandas \
-    numpy
 
 # Create necessary directories
 RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs
