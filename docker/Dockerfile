@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir -p /opt/hadoop/lib/native && \
     curl -fSL "https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz" -o /tmp/hadoop.tar.gz && \
     tar -xf /tmp/hadoop.tar.gz -C /tmp && \
-    cp /tmp/hadoop-${HADOOP_VERSION}/lib/native/* /opt/hadoop/lib/native/ && \
+    cp -r /tmp/hadoop-${HADOOP_VERSION}/lib/native/* /opt/hadoop/lib/native/ && \
     rm -rf /tmp/hadoop.tar.gz /tmp/hadoop-${HADOOP_VERSION}
 
 # Final stage
@@ -25,7 +25,7 @@ ENV HADOOP_VERSION=3.3.6
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin
 ENV HADOOP_HOME=/opt/hadoop
-ENV LD_LIBRARY_PATH=$HADOOP_HOME/lib/native:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/opt/hadoop/lib/native
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
