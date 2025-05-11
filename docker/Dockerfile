@@ -20,7 +20,7 @@ RUN mkdir -p /opt/hadoop/lib/native && \
 FROM eclipse-temurin:17-jdk-jammy
 
 # Set environment variables
-ENV SPARK_VERSION=3.5.1
+ENV SPARK_VERSION=3.5.5
 ENV HADOOP_VERSION=3.3.6
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin
@@ -42,10 +42,10 @@ RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native
 COPY --from=hadoop-builder /opt/hadoop/lib/native ${HADOOP_HOME}/lib/native/
 
 # Download and install Spark
-RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" -o /tmp/spark.tgz && \
+RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13.tgz" -o /tmp/spark.tgz && \
     tar -xf /tmp/spark.tgz -C /opt && \
-    mv /opt/spark-${SPARK_VERSION}-bin-hadoop3/* ${SPARK_HOME} && \
-    rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3
+    mv /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13/* ${SPARK_HOME} && \
+    rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13
 
 # Copy scripts
 COPY docker/scripts/ ${SPARK_HOME}/scripts/
