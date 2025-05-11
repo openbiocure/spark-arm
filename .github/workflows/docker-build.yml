@@ -50,7 +50,7 @@ jobs:
             type=raw,value=latest
             type=raw,value=${{ env.VERSION }}
             type=raw,value=arm64-${{ env.VERSION }}
-            type=sha,format=short,enable={{github.event_name == 'pull_request'}}
+            type=sha,format=short,enable=${{ github.event_name == 'pull_request' && 'true' || 'false' }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
