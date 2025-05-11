@@ -5,11 +5,11 @@ metadata:
   labels:
     type: local
 spec:
-  storageClassName: manual
+  storageClassName: {{ .Values.storage.className }}
   capacity:
-    storage: 10Gi
+    storage: {{ .Values.storage.size }}
   accessModes:
-    - ReadWriteOnce
+    - {{ .Values.storage.accessMode }}
   hostPath:
     path: "/mnt/data/spark-logs"
 ---

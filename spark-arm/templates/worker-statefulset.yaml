@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/component: worker
 spec:
   serviceName: {{ include "spark-arm.fullname" . }}-worker
-  replicas: {{ .Values.worker.replicas }}
+  replicas: {{ .Values.worker.replicas | default 1 }}
   selector:
     matchLabels:
       {{- include "spark-arm.selectorLabels" . | nindent 6 }}
@@ -30,20 +30,29 @@ spec:
         - name: spark
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/spark/bin/spark-class"]
+          args: ["org.apache.spark.deploy.worker.Worker", "spark://{{ include "spark-arm.fullname" . }}-master:7077"]
           env:
-            # Minimal static env block (no templating) to avoid indentation issues.
             - name: SPARK_HOME
               value: /opt/spark
             - name: SPARK_NODE_TYPE
               value: "worker"
-            - name: SPARK_MASTER_HOST
-              value: "spark-master"
             - name: SPARK_LOCAL_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
               value: {{ include "spark-arm.fullname" . }}-worker
+            - name: SPARK_WORKER_CORES
+              value: {{ .Values.worker.cores | quote }}
+            - name: SPARK_WORKER_MEMORY
+              value: {{ .Values.worker.memory | quote }}
+            - name: SPARK_WORKER_WEBUI_PORT
+              value: "8081"
+            - name: SPARK_WORKER_OPTS
+              value: "-Dspark.worker.cleanup.enabled=true"
+            - name: SPARK_DAEMON_JAVA_OPTS
+              value: "-Dspark.worker.cleanup.enabled=true"
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark

@@ -30,20 +30,29 @@ spec:
         - name: spark
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/opt/spark/bin/spark-class"]
+          args: ["org.apache.spark.deploy.master.Master"]
           env:
-            # Minimal static env block (no templating) to avoid indentation issues.
             - name: SPARK_HOME
               value: /opt/spark
             - name: SPARK_NODE_TYPE
               value: "master"
-            - name: SPARK_MASTER_HOST
-              value: "spark-master"
             - name: SPARK_LOCAL_HOSTNAME
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
               value: {{ include "spark-arm.fullname" . }}-master
+            - name: SPARK_MASTER_HOST
+              value: "0.0.0.0"
+            - name: SPARK_MASTER_PORT
+              value: "7077"
+            - name: SPARK_MASTER_WEBUI_PORT
+              value: "8080"
+            - name: SPARK_MASTER_OPTS
+              value: "-Dspark.deploy.recoveryMode=NONE -Dspark.master.rest.enabled=false"
+            - name: SPARK_DAEMON_JAVA_OPTS
+              value: "-Dspark.deploy.recoveryMode=NONE -Dspark.master.rest.enabled=false"
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark

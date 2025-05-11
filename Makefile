@@ -1,6 +1,6 @@
 # Variables
 IMAGE_NAME ?= ghcr.io/openbiocure/spark-arm
-IMAGE_TAG ?= sha-971fd0f
+IMAGE_TAG ?= latest
 NAMESPACE ?= spark
 DOCKER_BUILD_ARGS ?= --platform linux/arm64
 VALUES_FILE ?= spark-arm/values.yaml
@@ -22,16 +22,14 @@ clean:
 # Lint Helm charts
 lint:
 	helm lint spark-arm
-	helm template spark-arm spark-arm --values $(VALUES_FILE) --set image.repository=$(IMAGE_NAME) --set image.tag=$(IMAGE_TAG) > /dev/null
+	helm template spark-arm spark-arm --values $(VALUES_FILE)
 
 # Deploy the Spark cluster using Helm
 deploy: lint
 	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	helm upgrade --install spark-arm spark-arm \
 		--namespace $(NAMESPACE) \
-		--values $(VALUES_FILE) \
-		--set image.repository=$(IMAGE_NAME) \
-		--set image.tag=$(IMAGE_TAG)
+		--values $(VALUES_FILE)
 
 # Undeploy the Spark cluster
 undeploy:

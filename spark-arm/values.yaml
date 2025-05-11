@@ -38,7 +38,7 @@ worker:
 # Image configuration
 image:
   repository: ghcr.io/openbiocure/spark-arm
-  tag: sha-971fd0f
+  tag: sha-feab3a9
   pullPolicy: IfNotPresent
 
 # Service configuration
