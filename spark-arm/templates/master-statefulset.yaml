@@ -45,16 +45,56 @@ spec:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
               value: {{ include "spark-arm.fullname" . }}-master
+            - name: SPARK_DAEMON_JAVA_OPTS
+              value: >-
+                -Dspark.deploy.recoveryMode=NONE 
+                -Dspark.master.rest.enabled=false
+                {{- if .Values.minio.enabled }}
+                -Dspark.hadoop.fs.s3a.access.key=$(MINIO_ACCESS_KEY)
+                -Dspark.hadoop.fs.s3a.secret.key=$(MINIO_SECRET_KEY)
+                {{- end }}
+                {{- if .Values.hive.enabled }}
+                {{- range $key, $value := .Values.hive.spark.hadoop }}
+                -D{{ $key }}={{ $value | quote }}
+                {{- end }}
+                {{- end }}
+                {{- if .Values.delta.enabled }}
+                {{- range $key, $value := .Values.delta.spark.hadoop }}
+                -D{{ $key }}={{ $value | quote }}
+                {{- end }}
+                {{- end }}
+            {{- if .Values.minio.enabled }}
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spark-arm.fullname" . }}-minio-credentials
+                  key: accessKey
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spark-arm.fullname" . }}-minio-credentials
+                  key: secretKey
+            {{- end }}
+            {{- if .Values.hive.enabled }}
+            - name: POSTGRES_HOST
+              value: {{ .Values.hive.metastore.host | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.hive.metastore.port | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.hive.metastore.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.hive.metastore.username | quote }}
+            - name: POSTGRES_PASSWORD
+              value: {{ .Values.hive.metastore.password | quote }}
+            - name: HIVE_METASTORE_HOST
+              value: {{ .Values.hive.metastore.host | quote }}
+            {{- end }}
             - name: SPARK_MASTER_HOST
               value: "0.0.0.0"
             - name: SPARK_MASTER_PORT
               value: "7077"
             - name: SPARK_MASTER_WEBUI_PORT
               value: "8080"
-            - name: SPARK_MASTER_OPTS
-              value: "-Dspark.deploy.recoveryMode=NONE -Dspark.master.rest.enabled=false"
-            - name: SPARK_DAEMON_JAVA_OPTS
-              value: "-Dspark.deploy.recoveryMode=NONE -Dspark.master.rest.enabled=false"
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark

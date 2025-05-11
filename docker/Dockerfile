@@ -22,6 +22,7 @@ FROM eclipse-temurin:17-jdk-jammy
 # Set environment variables
 ENV SPARK_VERSION=3.5.5
 ENV HADOOP_VERSION=3.3.6
+ENV DELTA_VERSION=3.3.1
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin
 ENV HADOOP_HOME=/opt/hadoop
@@ -33,10 +34,26 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     procps \
     tini \
+    python3 \
+    python3-pip \
+    python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
+# Set Python environment variables
+ENV PYTHONPATH=$SPARK_HOME/python:$SPARK_HOME/python/lib/py4j-0.10.9.7-src.zip:$PYTHONPATH
+ENV PYSPARK_PYTHON=python3
+ENV PYSPARK_DRIVER_PYTHON=python3
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir \
+    pyspark==${SPARK_VERSION} \
+    delta-spark==${DELTA_VERSION} \
+    pyarrow \
+    pandas \
+    numpy
+
 # Create necessary directories
-RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native
+RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars
 
 # Copy Hadoop native libraries from builder stage
 COPY --from=hadoop-builder /opt/hadoop/lib/native ${HADOOP_HOME}/lib/native/
@@ -46,6 +63,13 @@ RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPA
     tar -xf /tmp/spark.tgz -C /opt && \
     mv /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13/* ${SPARK_HOME} && \
     rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13
+
+# Download Delta Lake dependencies (3.3.1)
+RUN curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-core_2.13/${DELTA_VERSION}/delta-core_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-core.jar && \
+    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-storage.jar && \
+    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-hive_2.13/${DELTA_VERSION}/delta-hive_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-hive.jar && \
+    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-standalone_2.13/${DELTA_VERSION}/delta-standalone_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-standalone.jar && \
+    curl -fSL "https://repo1.maven.org/maven2/io/delta/delta-contribs_2.13/${DELTA_VERSION}/delta-contribs_2.13-${DELTA_VERSION}.jar" -o ${SPARK_HOME}/jars/delta-contribs.jar
 
 # Copy scripts
 COPY docker/scripts/ ${SPARK_HOME}/scripts/

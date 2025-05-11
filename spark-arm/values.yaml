@@ -3,6 +3,37 @@ nameOverride: ""
 fullnameOverride: ""
 namespace: spark
 
+# MinIO configuration
+minio:
+  enabled: true
+  # External MinIO service configuration
+  endpoint: "${MINIO_ENDPOINT}"
+  bucket: "${MINIO_BUCKET:-spark-data}" # Default to spark-data if not set
+  # MinIO credentials (should be provided via secret in production)
+  credentials:
+    accessKey: "${MINIO_ACCESS_KEY}" # Leave empty, should be provided via secret
+    secretKey: "${MINIO_SECRET_KEY}" # Leave empty, should be provided via secret
+  # Spark integration settings
+  spark:
+    hadoop:
+      fs.s3a.endpoint: "${MINIO_ENDPOINT}"
+      fs.s3a.access.key: "${MINIO_ACCESS_KEY}"
+      fs.s3a.secret.key: "${MINIO_SECRET_KEY}"
+      fs.s3a.path.style.access: "true"
+      fs.s3a.connection.ssl.enabled: "false"
+      fs.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
+      # Additional settings for external access
+      fs.s3a.connection.maximum: "100"
+      fs.s3a.connection.timeout: "10000"
+      fs.s3a.connection.establish.timeout: "5000"
+      fs.s3a.aws.credentials.provider: "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+      # Delta Lake specific S3 settings
+      fs.s3a.committer.name: "directory"
+      fs.s3a.committer.staging.conflict-mode: "append"
+      fs.s3a.committer.staging.tmp.path: "/tmp/staging"
+      fs.s3a.committer.threads: "4"
+      fs.s3a.committer.directory.cleanup.enabled: "true"
+
 # Master configuration
 master:
   enabled: true
@@ -113,3 +144,61 @@ autoscaling:
   maxReplicas: 5
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
+
+# Hive Metastore Configuration
+hive:
+  enabled: true
+  metastore:
+    type: postgresql
+    host: "${POSTGRES_HOST}"
+    port: 5432
+    database: "hive"
+    username: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
+  spark:
+    hadoop:
+      # Spark SQL Hive settings
+      spark.sql.warehouse.dir: "s3a://${MINIO_BUCKET}/warehouse"
+      spark.sql.catalogImplementation: "hive"
+      # Direct PostgreSQL connection for Hive metastore
+      spark.hadoop.javax.jdo.option.ConnectionURL: "jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+      spark.hadoop.javax.jdo.option.ConnectionDriverName: "org.postgresql.Driver"
+      spark.hadoop.javax.jdo.option.ConnectionUserName: "${POSTGRES_USER}"
+      spark.hadoop.javax.jdo.option.ConnectionPassword: "${POSTGRES_PASSWORD}"
+      # Disable schema verification and SASL for simplicity
+      spark.hadoop.datanucleus.schema.autoCreateAll: "true"
+      spark.hadoop.datanucleus.autoCreateSchema: "true"
+      spark.hadoop.datanucleus.fixedDatastore: "false"
+      spark.hadoop.datanucleus.autoCreateTables: "true"
+
+# Delta Lake Configuration
+delta:
+  enabled: true
+  spark:
+    hadoop:
+      # Delta Lake specific settings
+      spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+      spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+      # Delta Lake table properties
+      spark.delta.logStore.class: "org.apache.spark.sql.delta.storage.S3SingleDriverLogStore"
+      spark.delta.merge.repartitionBeforeWrite: "true"
+      spark.delta.autoOptimize.optimizeWrite: "true"
+      spark.delta.autoOptimize.autoCompact: "true"
+      # Delta Lake S3 settings
+      spark.delta.storage.s3.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
+      spark.delta.storage.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
+      # Delta Lake table paths
+      spark.delta.warehouse.dir: "s3a://${MINIO_BUCKET}/delta"
+      # Delta Lake performance settings
+      spark.delta.optimizeWrite.enabled: "true"
+      spark.delta.autoCompact.enabled: "true"
+      spark.delta.optimizeWrite.numShuffleBlocks: "200"
+      spark.delta.optimizeWrite.targetFileSize: "128m"
+      # Delta Lake concurrent writes settings
+      spark.delta.concurrent.writes.enabled: "true"
+      spark.delta.concurrent.writes.maxConcurrentWrites: "10"
+      # Delta Lake schema evolution
+      spark.delta.schema.autoMerge.enabled: "true"
+      # Delta Lake time travel settings
+      spark.delta.timeTravel.enabled: "true"
+      spark.delta.timeTravel.retentionPeriod: "168h" # 7 days
