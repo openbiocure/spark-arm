@@ -12,6 +12,16 @@ A production-ready Apache Spark cluster configuration for ARM64 architecture, fe
 - 🔄 Stateful master node
 - 📦 Helm chart for easy deployment
 - 🔧 Makefile for common tasks
+- ✅ Stable release with verified master-worker connectivity
+
+## Current Status
+
+The project is now in a stable state with:
+- Verified master-worker connectivity
+- Proper service discovery
+- Resource cleanup
+- Health monitoring
+- Persistent logging
 
 ## Prerequisites
 
@@ -29,7 +39,12 @@ git clone https://github.com/openbiocure/spark-arm.git
 cd spark-arm
 ```
 
-2. Build and deploy:
+2. Use the stable release:
+```bash
+git checkout stable
+```
+
+3. Build and deploy:
 ```bash
 make all
 ```

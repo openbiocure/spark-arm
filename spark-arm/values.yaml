@@ -20,7 +20,8 @@ master:
 # Worker configuration
 worker:
   enabled: true
-  replicaCount: 2
+  # Number of worker pods to create
+  replicaCount: 3 # Must be set to 3 for three worker nodes
   cores: "2"
   memory: "2048m"
   resources:

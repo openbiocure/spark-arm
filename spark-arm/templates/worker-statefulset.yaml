@@ -8,7 +8,8 @@ metadata:
     app.kubernetes.io/component: worker
 spec:
   serviceName: {{ include "spark-arm.fullname" . }}-worker
-  replicas: {{ .Values.worker.replicas | default 1 }}
+  # Set number of worker replicas from values.yaml
+  replicas: {{ .Values.worker.replicaCount | default 1 }}
   selector:
     matchLabels:
       {{- include "spark-arm.selectorLabels" . | nindent 6 }}
@@ -22,6 +23,17 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
       {{- end }}
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/component
+                    operator: In
+                    values:
+                      - master
+                      - worker
+              topologyKey: "kubernetes.io/hostname"
       volumes:
         - name: spark-logs
           persistentVolumeClaim:
@@ -56,7 +68,7 @@ spec:
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark
-            - containerPort: {{ .Values.service.uiPort }}
+            - containerPort: 8081
               name: webui
           volumeMounts:
             - name: spark-logs
@@ -66,20 +78,21 @@ spec:
           startupProbe:
             tcpSocket:
               port: webui
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 20
+            periodSeconds: 5
             failureThreshold: 30
+            timeoutSeconds: 3
           livenessProbe:
             tcpSocket:
               port: webui
-            initialDelaySeconds: 60
-            periodSeconds: 20
-            timeoutSeconds: 10
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
               port: webui
-            initialDelaySeconds: 60
-            periodSeconds: 20
-            timeoutSeconds: 10
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3 
