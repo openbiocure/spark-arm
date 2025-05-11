@@ -6,13 +6,6 @@ if [ -f ../.env ]; then
     source ../.env
 fi
 
-# Ensure we're in a virtual environment
-if [ -z "${VIRTUAL_ENV:-}" ]; then
-    echo "Error: Please activate the virtual environment first"
-    echo "Run: python3 -m venv venv && source venv/bin/activate"
-    exit 1
-fi
-
 # Check if port forwarding is running
 if ! nc -z localhost 7077 2>/dev/null; then
     echo "Error: Spark master port (7077) is not forwarded"
@@ -21,10 +14,17 @@ if ! nc -z localhost 7077 2>/dev/null; then
 fi
 
 echo "Running Spark cluster tests locally..."
-echo "Using virtual environment: $VIRTUAL_ENV"
 
-# Run the test script directly
-python3 test_spark_cluster.py
+# Build the Scala project
+echo "Building Scala project..."
+cd "$(dirname "$0")"
+sbt clean assembly
+
+# Run the test script
+echo "Running tests..."
+spark-submit \
+  --class org.openbiocure.spark.TestSparkCluster \
+  target/scala-2.13/spark-arm-tests-assembly-1.0.0.jar
 
 # Check the exit code
 EXIT_CODE=$?

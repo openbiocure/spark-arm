@@ -49,8 +49,12 @@ spec:
           echo "SPARK_DRIVER_OPTS: ${SPARK_DRIVER_OPTS}"
           echo "SPARK_EXECUTOR_OPTS: ${SPARK_EXECUTOR_OPTS}"
           
-          # Run test script with explicit classpath
-          PYTHONPATH=/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.7-src.zip python3 /opt/spark/tests/test_spark_cluster.py
+          # Build and run Scala tests
+          cd /opt/spark/tests
+          sbt clean assembly
+          spark-submit \
+            --class org.openbiocure.spark.TestSparkCluster \
+            target/scala-2.13/spark-arm-tests-assembly-1.0.0.jar
         env:
         - name: SPARK_HOME
           value: /opt/spark
@@ -96,7 +100,6 @@ spec:
           mountPath: /opt/spark/tests
         - name: spark-jars
           mountPath: /opt/spark/jars
-          readOnly: true
       volumes:
       - name: test-scripts
         configMap:

@@ -42,8 +42,8 @@ metadata:
 data:
 EOF
 
-# Add each Python file from the tests directory to the ConfigMap
-for test_file in "$TESTS_DIR"/*.py; do
+# Add each Scala file from the tests directory to the ConfigMap
+for test_file in "$TESTS_DIR"/*.scala; do
     if [ -f "$test_file" ]; then
         filename=$(basename "$test_file")
         echo "  $filename: |" >> "$TEMP_FILE"
@@ -53,9 +53,20 @@ for test_file in "$TESTS_DIR"/*.py; do
     fi
 done
 
+# Add build.sbt and plugins.sbt
+for build_file in "$TESTS_DIR"/build.sbt "$TESTS_DIR"/project/plugins.sbt; do
+    if [ -f "$build_file" ]; then
+        filename=$(basename "$build_file")
+        echo "  $filename: |" >> "$TEMP_FILE"
+        # Add the file contents with proper indentation
+        sed 's/^/    /' "$build_file" >> "$TEMP_FILE"
+        echo "" >> "$TEMP_FILE"  # Add a newline after each file
+    fi
+done
+
 # Replace the old ConfigMap with the new one
 mv "$TEMP_FILE" "$CONFIGMAP_FILE"
 
 echo "Successfully updated test ConfigMap with latest test files"
 echo "Updated files:"
-ls -1 "$TESTS_DIR"/*.py | xargs -n1 basename 
+find "$TESTS_DIR" -type f \( -name "*.scala" -o -name "build.sbt" -o -name "plugins.sbt" \) -printf "%f\n" 

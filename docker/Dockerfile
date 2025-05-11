@@ -20,12 +20,10 @@ RUN mkdir -p /opt/hadoop/lib/native && \
 FROM eclipse-temurin:17-jdk-jammy
 
 # Set environment variables
-# Note: Using PySpark 3.4.2 with Delta Spark 2.4.0 as this is a stable, tested combination.
-# Delta Spark 2.4.0 requires PySpark >=3.4.0 and <3.5.0
-# See VERSIONS.md for detailed version compatibility information
-ENV SPARK_VERSION=3.4.2
+# Using Spark 3.5.0 with Delta Lake 3.0.0 for latest features
+ENV SPARK_VERSION=3.5.0
 ENV HADOOP_VERSION=3.3.6
-ENV DELTA_VERSION=2.4.0
+ENV DELTA_VERSION=3.0.0
 ENV AWS_SDK_VERSION=1.12.262
 ENV SCALA_VERSION=2.13
 ENV SPARK_HOME=/opt/spark
