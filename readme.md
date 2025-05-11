@@ -1,3 +1,5 @@
+[![Build and Push ARM64 Docker Image](https://github.com/openbiocure/spark-arm/actions/workflows/docker-build.yml/badge.svg)](https://github.com/openbiocure/spark-arm/actions/workflows/docker-build.yml)
+
 # Spark Cluster for ARM64
 
 A production-ready Apache Spark cluster configuration for ARM64 architecture, featuring Docker containers and Kubernetes deployment.
