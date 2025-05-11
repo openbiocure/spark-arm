@@ -1,6 +1,7 @@
 # Variables
 IMAGE_NAME ?= ghcr.io/openbiocure/spark-arm
-IMAGE_TAG ?= latest
+VERSION := $(shell cat tag)
+IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
 DOCKER_BUILD_ARGS ?= --platform linux/arm64
 VALUES_FILE ?= spark-arm/values.yaml
@@ -10,10 +11,12 @@ VALUES_FILE ?= spark-arm/values.yaml
 # Build the Docker image
 build:
 	docker build $(DOCKER_BUILD_ARGS) -t $(IMAGE_NAME):$(IMAGE_TAG) -f docker/Dockerfile .
+	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):latest
 
 # Push the Docker image to registry
 push:
 	docker push $(IMAGE_NAME):$(IMAGE_TAG)
+	docker push $(IMAGE_NAME):latest
 
 # Clean up build artifacts
 clean:
@@ -29,7 +32,8 @@ deploy: lint
 	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	helm upgrade --install spark-arm spark-arm \
 		--namespace $(NAMESPACE) \
-		--values $(VALUES_FILE)
+		--values $(VALUES_FILE) \
+		--set image.tag=$(VERSION)
 
 # Undeploy the Spark cluster
 undeploy:
