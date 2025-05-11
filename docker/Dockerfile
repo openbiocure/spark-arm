@@ -20,9 +20,14 @@ RUN mkdir -p /opt/hadoop/lib/native && \
 FROM eclipse-temurin:17-jdk-jammy
 
 # Set environment variables
-ENV SPARK_VERSION=3.5.5
+# Note: Using PySpark 3.4.2 with Delta Spark 2.4.0 as this is a stable, tested combination.
+# Delta Spark 2.4.0 requires PySpark >=3.4.0 and <3.5.0
+# See VERSIONS.md for detailed version compatibility information
+ENV SPARK_VERSION=3.4.2
 ENV HADOOP_VERSION=3.3.6
-ENV DELTA_VERSION=3.3.1
+ENV DELTA_VERSION=2.4.0
+ENV AWS_SDK_VERSION=1.12.262
+ENV SCALA_VERSION=2.13
 ENV SPARK_HOME=/opt/spark
 ENV PATH=$PATH:$SPARK_HOME/bin
 ENV HADOOP_HOME=/opt/hadoop
@@ -54,42 +59,26 @@ RUN pip3 install --no-cache-dir \
     numpy
 
 # Create necessary directories
-RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars
+RUN mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs
 
 # Copy Hadoop native libraries from builder stage
 COPY --from=hadoop-builder /opt/hadoop/lib/native ${HADOOP_HOME}/lib/native/
 
-# Download and install Spark
-RUN curl -fSL "https://dlcdn.apache.org/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13.tgz" -o /tmp/spark.tgz && \
-    tar -xf /tmp/spark.tgz -C /opt && \
-    mv /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13/* ${SPARK_HOME} && \
-    rm -rf /tmp/spark.tgz /opt/spark-${SPARK_VERSION}-bin-hadoop3-scala2.13
+# Copy scripts
+COPY docker/scripts/ ${SPARK_HOME}/scripts/
+RUN chmod +x ${SPARK_HOME}/scripts/*.sh
 
-# Download Delta Lake and S3A dependencies
-RUN for jar in \
-    "delta-core_2.13/${DELTA_VERSION}/delta-core_2.13-${DELTA_VERSION}.jar" \
-    "delta-storage/${DELTA_VERSION}/delta-storage-${DELTA_VERSION}.jar" \
-    "delta-hive_2.13/${DELTA_VERSION}/delta-hive_2.13-${DELTA_VERSION}.jar" \
-    "delta-standalone_2.13/${DELTA_VERSION}/delta-standalone_2.13-${DELTA_VERSION}.jar" \
-    "delta-contribs_2.13/${DELTA_VERSION}/delta-contribs_2.13-${DELTA_VERSION}.jar" \
-    "hadoop-aws/${HADOOP_VERSION}/hadoop-aws-${HADOOP_VERSION}.jar" \
-    "aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar"; do \
-    echo "Downloading $jar" && \
-    curl -fSL "https://repo1.maven.org/maven2/io/delta/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
-    curl -fSL "https://repo1.maven.org/maven2/org/apache/hadoop/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
-    curl -fSL "https://repo1.maven.org/maven2/com/amazonaws/${jar}" -o "${SPARK_HOME}/jars/$(basename $jar)" || \
-    (echo "Failed to download $jar" && exit 1); \
-done
+# Download and install Spark
+RUN ${SPARK_HOME}/scripts/download-spark.sh ${SPARK_VERSION} ${SPARK_HOME}
+
+# Download all required JARs
+RUN ${SPARK_HOME}/scripts/download-jars.sh
 
 # Create spark-defaults.conf with necessary configurations
 RUN echo "spark.driver.extraClassPath /opt/spark/jars/*" > ${SPARK_HOME}/conf/spark-defaults.conf && \
     echo "spark.executor.extraClassPath /opt/spark/jars/*" >> ${SPARK_HOME}/conf/spark-defaults.conf && \
     echo "spark.sql.extensions io.delta.sql.DeltaSparkSessionExtension" >> ${SPARK_HOME}/conf/spark-defaults.conf && \
     echo "spark.sql.catalog.spark_catalog org.apache.spark.sql.delta.catalog.DeltaCatalog" >> ${SPARK_HOME}/conf/spark-defaults.conf
-
-# Copy scripts
-COPY docker/scripts/ ${SPARK_HOME}/scripts/
-RUN chmod +x ${SPARK_HOME}/scripts/*.sh
 
 # Set working directory
 WORKDIR ${SPARK_HOME}

@@ -60,10 +60,15 @@ test:
 	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE) --timeout=300s
 
 # Run comprehensive cluster tests
-test-cluster:
+test-cluster: export-env
+	@echo "Generating test scripts in ConfigMap..."
+	@./scripts/update-test-configmap.sh
+	@echo "Cleaning up any existing test jobs..."
+	@kubectl delete job spark-test-job -n spark --ignore-not-found=true
 	@echo "Running tests in the cluster..."
 	@helm upgrade --install spark-arm ./spark-arm \
 		--namespace spark \
+		--set test.enabled=true \
 		--set minio.endpoint="${MINIO_ENDPOINT}" \
 		--set minio.credentials.accessKey="${MINIO_ACCESS_KEY}" \
 		--set minio.credentials.secretKey="${MINIO_SECRET_KEY}" \
@@ -73,26 +78,13 @@ test-cluster:
 		--set hive.metastore.database="${POSTGRES_DB:-hive}" \
 		--set hive.metastore.username="${POSTGRES_USER}" \
 		--set hive.metastore.password="${POSTGRES_PASSWORD}"
+	@echo "Waiting for test job to complete..."
 	@kubectl wait --for=condition=complete job/spark-test-job -n spark --timeout=300s
+	@echo "Test job logs:"
 	@kubectl logs -n spark -l job-name=spark-test-job --tail=-1
 
 # Build, push and deploy
 all: build push deploy
-
-# Show help
-help:
-	@echo "Available commands:"
-	@echo "  make build        - Build the Docker image"
-	@echo "  make push         - Push the Docker image to registry"
-	@echo "  make clean        - Clean up build artifacts"
-	@echo "  make lint         - Lint Helm charts and validate templates"
-	@echo "  make deploy       - Deploy the Spark cluster"
-	@echo "  make undeploy     - Undeploy the Spark cluster"
-	@echo "  make logs         - Get logs from Spark pods"
-	@echo "  make test         - Test cluster readiness"
-	@echo "  make test-cluster - Run comprehensive cluster tests"
-	@echo "  make all          - Build, push and deploy"
-	@echo "  make help         - Show this help message"
 
 # Port-forward to Spark master UI (requires environment variables)
 port-forward: export-env
@@ -100,3 +92,20 @@ port-forward: export-env
 	@echo "- Master: localhost:7077"
 	@echo "- UI: http://localhost:8080"
 	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080
+
+
+# Show help
+help:
+	@echo "Available commands:"
+	@echo "  make build            - Build the Docker image"
+	@echo "  make push             - Push the Docker image to registry"
+	@echo "  make clean            - Clean up build artifacts"
+	@echo "  make lint             - Lint Helm charts and validate templates"
+	@echo "  make deploy           - Deploy the Spark cluster"
+	@echo "  make undeploy         - Undeploy the Spark cluster"
+	@echo "  make logs             - Get logs from Spark pods"
+	@echo "  make test             - Test cluster readiness"
+	@echo "  make test-cluster     - Run comprehensive cluster tests"
+	@echo "  make all              - Build, push and deploy"
+	@echo "  make help             - Show this help message"
+

@@ -2,14 +2,77 @@ from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType
 import os
 import time
+import glob
+
+def verify_delta_jars():
+    """Verify that Delta Lake JARs are present and in classpath."""
+    print("\n=== Verifying Delta Lake JARs ===")
+    jar_path = "/opt/spark/jars"
+    delta_jars = glob.glob(f"{jar_path}/delta-*.jar")
+    
+    print(f"Found Delta JARs in {jar_path}:")
+    for jar in delta_jars:
+        print(f"- {os.path.basename(jar)}")
+    
+    if not delta_jars:
+        raise RuntimeError("No Delta Lake JARs found in /opt/spark/jars/")
+    
+    print("\nClasspath environment variables:")
+    print(f"SPARK_CLASSPATH: {os.getenv('SPARK_CLASSPATH', 'Not set')}")
+    print(f"SPARK_HOME: {os.getenv('SPARK_HOME', 'Not set')}")
+    print(f"SPARK_DAEMON_JAVA_OPTS: {os.getenv('SPARK_DAEMON_JAVA_OPTS', 'Not set')}")
 
 def create_spark_session():
     """Create a Spark session with all necessary configurations."""
+    # Verify Delta JARs before creating session
+    verify_delta_jars()
+    
+    # Get list of Delta JARs
+    jar_path = "/opt/spark/jars"
+    delta_jars = glob.glob(f"{jar_path}/delta-*.jar")
+    delta_jars_str = ",".join(delta_jars)
+    
+    print(f"\nUsing Delta JARs: {delta_jars_str}")
+    
+    # Enable debug logging
+    print("\nSetting up Spark session with debug logging...")
+    
     return (SparkSession.builder
             .appName("SparkClusterTest")
-            .master("spark://localhost:7077")  # Connect to local forwarded port
+            .master(os.getenv("SPARK_MASTER_URL", "spark://spark-arm-master:7077"))
+            .config("spark.jars", delta_jars_str)
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+            .config("spark.driver.extraJavaOptions", "-Dlog4j.configuration=file:/opt/spark/conf/log4j2.xml -Dlog4j2.debug=true")
+            .config("spark.executor.extraJavaOptions", "-Dlog4j.configuration=file:/opt/spark/conf/log4j2.xml -Dlog4j2.debug=true")
+            .config("spark.driver.log.level", "DEBUG")
+            .config("spark.executor.log.level", "DEBUG")
+            .config("spark.sql.warehouse.dir", "s3a://${MINIO_BUCKET}/warehouse")
+            .config("spark.sql.catalogImplementation", "hive")
+            .config("spark.hadoop.javax.jdo.option.ConnectionURL", "jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}")
+            .config("spark.hadoop.javax.jdo.option.ConnectionDriverName", "org.postgresql.Driver")
+            .config("spark.hadoop.javax.jdo.option.ConnectionUserName", "${POSTGRES_USER}")
+            .config("spark.hadoop.javax.jdo.option.ConnectionPassword", "${POSTGRES_PASSWORD}")
+            .config("spark.hadoop.datanucleus.schema.autoCreateAll", "true")
+            .config("spark.hadoop.datanucleus.autoCreateSchema", "true")
+            .config("spark.hadoop.datanucleus.fixedDatastore", "false")
+            .config("spark.hadoop.datanucleus.autoCreateTables", "true")
+            .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.S3SingleDriverLogStore")
+            .config("spark.delta.merge.repartitionBeforeWrite", "true")
+            .config("spark.delta.autoOptimize.optimizeWrite", "true")
+            .config("spark.delta.autoOptimize.autoCompact", "true")
+            .config("spark.delta.storage.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.delta.storage.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+            .config("spark.delta.warehouse.dir", "s3a://${MINIO_BUCKET}/delta")
+            .config("spark.delta.optimizeWrite.enabled", "true")
+            .config("spark.delta.autoCompact.enabled", "true")
+            .config("spark.delta.optimizeWrite.numShuffleBlocks", "200")
+            .config("spark.delta.optimizeWrite.targetFileSize", "128m")
+            .config("spark.delta.concurrent.writes.enabled", "true")
+            .config("spark.delta.concurrent.writes.maxConcurrentWrites", "10")
+            .config("spark.delta.schema.autoMerge.enabled", "true")
+            .config("spark.delta.timeTravel.enabled", "true")
+            .config("spark.delta.timeTravel.retentionPeriod", "168h")
             .getOrCreate())
 
 def test_basic_spark(spark):
