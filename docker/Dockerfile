@@ -20,7 +20,7 @@ RUN mkdir -p /opt/hadoop/lib/native && \
 FROM eclipse-temurin:17-jdk-jammy
 
 # Set environment variables
-ENV SPARK_VERSION=3.5.5
+ENV SPARK_VERSION=3.5.3
 ENV HADOOP_VERSION=3.3.6
 ENV DELTA_VERSION=3.3.1
 ENV SPARK_HOME=/opt/spark

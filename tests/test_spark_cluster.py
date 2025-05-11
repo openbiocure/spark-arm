@@ -7,6 +7,7 @@ def create_spark_session():
     """Create a Spark session with all necessary configurations."""
     return (SparkSession.builder
             .appName("SparkClusterTest")
+            .master("spark://localhost:7077")  # Connect to local forwarded port
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
             .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
             .getOrCreate())

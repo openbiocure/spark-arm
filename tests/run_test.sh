@@ -6,27 +6,25 @@ if [ -f ../.env ]; then
     source ../.env
 fi
 
-# Get the master pod name
-MASTER_POD=$(kubectl get pods -n spark -l app.kubernetes.io/component=master -o jsonpath="{.items[0].metadata.name}")
-
-if [ -z "$MASTER_POD" ]; then
-    echo "Error: Could not find Spark master pod"
+# Ensure we're in a virtual environment
+if [ -z "${VIRTUAL_ENV:-}" ]; then
+    echo "Error: Please activate the virtual environment first"
+    echo "Run: python3 -m venv venv && source venv/bin/activate"
     exit 1
 fi
 
-echo "Found Spark master pod: $MASTER_POD"
+# Check if port forwarding is running
+if ! nc -z localhost 7077 2>/dev/null; then
+    echo "Error: Spark master port (7077) is not forwarded"
+    echo "Run: make port-forward"
+    exit 1
+fi
 
-# Copy test script to the pod
-echo "Copying test script to pod..."
-kubectl cp test_spark_cluster.py spark/$MASTER_POD:/tmp/
+echo "Running Spark cluster tests locally..."
+echo "Using virtual environment: $VIRTUAL_ENV"
 
-# Run the test
-echo "Running test script..."
-kubectl exec -n spark $MASTER_POD -- /opt/spark/bin/spark-submit \
-    --master local[*] \
-    --conf "spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension" \
-    --conf "spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog" \
-    /tmp/test_spark_cluster.py
+# Run the test script directly
+python3 test_spark_cluster.py
 
 # Check the exit code
 EXIT_CODE=$?

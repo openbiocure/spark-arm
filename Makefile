@@ -84,8 +84,10 @@ help:
 
 # Port-forward to Spark master UI (requires environment variables)
 port-forward: export-env
-	@echo "Forwarding Spark master UI to http://localhost:8080"
-	@kubectl port-forward -n spark svc/spark-arm-master 8080:8080
+	@echo "Forwarding Spark master ports:"
+	@echo "- Master: localhost:7077"
+	@echo "- UI: http://localhost:8080"
+	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080
 
 # Initialize OpenCert
 opencert-init:
