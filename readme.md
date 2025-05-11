@@ -149,6 +149,27 @@ make logs
 - **Networking**: Traefik ingress with TLS
 - **Monitoring**: Health checks and logging
 
+## Pod Scheduling
+The Spark cluster is deployed using StatefulSets with the following characteristics:
+- Master pod runs as a single replica
+- Worker pods run with configurable replicas (default: 3)
+- Pods are scheduled on Linux nodes using a basic node selector
+- No affinity rules or topology constraints are enforced, allowing flexible pod placement
+- Each pod has its own persistent volume for logs
+
+## Health Checks
+The pods use the following probe configurations for health monitoring:
+- Startup Probe:
+  - Master: 5 seconds initial delay
+  - Worker: 10 seconds initial delay
+  - 3-second period
+  - 2-second timeout
+- Liveness/Readiness Probes:
+  - 10 seconds initial delay
+  - 5-second period
+  - 3-second timeout
+  - 3 failure threshold
+
 ## Contributing
 
 1. Fork the repository

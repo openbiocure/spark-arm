@@ -57,4 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial project setup
 - Basic Docker configuration
-- ARM64 architecture support 
+- ARM64 architecture support
+
+## [Unreleased]
+### Changed
+- Simplified pod scheduling by removing affinity rules and topology spread constraints
+- Optimized probe configurations for faster pod startup:
+  - Reduced startup probe delays to 5-10 seconds
+  - Reduced liveness/readiness probe delays to 10 seconds
+  - Adjusted probe periods and timeouts for better responsiveness
+- Updated worker configuration to use 3 replicas by default
+- Improved pod scheduling flexibility to prevent termination issues 

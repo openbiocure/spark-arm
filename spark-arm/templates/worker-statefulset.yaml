@@ -23,17 +23,8 @@ spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
       {{- end }}
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchExpressions:
-                  - key: app.kubernetes.io/component
-                    operator: In
-                    values:
-                      - master
-                      - worker
-              topologyKey: "kubernetes.io/hostname"
+      nodeSelector:
+        kubernetes.io/os: linux
       volumes:
         - name: spark-logs
           persistentVolumeClaim:
@@ -78,21 +69,21 @@ spec:
           startupProbe:
             tcpSocket:
               port: webui
-            initialDelaySeconds: 20
-            periodSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 3
             failureThreshold: 30
-            timeoutSeconds: 3
+            timeoutSeconds: 2
           livenessProbe:
             tcpSocket:
               port: webui
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
             failureThreshold: 3
           readinessProbe:
             tcpSocket:
               port: webui
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
             failureThreshold: 3 
