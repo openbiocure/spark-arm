@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: spark-logs-pv
+  name: {{ include "spark-arm.fullname" . }}-logs-pv
   labels:
     type: local
 spec:
@@ -16,7 +16,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: spark-logs-pvc
+  name: {{ include "spark-arm.fullname" . }}-logs
+  namespace: {{ .Release.Namespace }}
 spec:
   storageClassName: {{ .Values.storage.className }}
   accessModes:

@@ -1,11 +1,11 @@
 # Variables
 IMAGE_NAME ?= ghcr.io/openbiocure/spark-arm
-IMAGE_TAG ?= v0.3
+IMAGE_TAG ?= sha-971fd0f
 NAMESPACE ?= spark
 DOCKER_BUILD_ARGS ?= --platform linux/arm64
 VALUES_FILE ?= spark-arm/values.yaml
 
-.PHONY: build push clean deploy undeploy logs test all help
+.PHONY: build push clean deploy undeploy logs test all help lint
 
 # Build the Docker image
 build:
@@ -19,8 +19,13 @@ push:
 clean:
 	rm -rf build/
 
+# Lint Helm charts
+lint:
+	helm lint spark-arm
+	helm template spark-arm spark-arm --values $(VALUES_FILE) --set image.repository=$(IMAGE_NAME) --set image.tag=$(IMAGE_TAG) > /dev/null
+
 # Deploy the Spark cluster using Helm
-deploy:
+deploy: lint
 	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	helm upgrade --install spark-arm spark-arm \
 		--namespace $(NAMESPACE) \
@@ -49,6 +54,7 @@ help:
 	@echo "  make build    - Build the Docker image"
 	@echo "  make push     - Push the Docker image to registry"
 	@echo "  make clean    - Clean up build artifacts"
+	@echo "  make lint     - Lint Helm charts and validate templates"
 	@echo "  make deploy   - Deploy the Spark cluster"
 	@echo "  make undeploy - Undeploy the Spark cluster"
 	@echo "  make logs     - Get logs from Spark pods"

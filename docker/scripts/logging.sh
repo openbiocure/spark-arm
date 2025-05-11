@@ -58,14 +58,29 @@ get_log_level_name() {
 
 # Rotate logs if needed
 rotate_logs_if_needed() {
-    if [ -f "$LOG_FILE" ] && [ $(stat -f %z "$LOG_FILE") -gt $LOG_MAX_SIZE ]; then
+    # Only attempt rotation if the log file exists and is writable
+    if [ ! -f "$LOG_FILE" ] || [ ! -w "$LOG_FILE" ]; then
+        return 0
+    fi
+
+    # Get file size using wc -c instead of stat (more portable)
+    local file_size=$(wc -c < "$LOG_FILE" 2>/dev/null || echo 0)
+    
+    if [ "$file_size" -gt "$LOG_MAX_SIZE" ]; then
+        # Create backup directory if it doesn't exist
+        local backup_dir="${LOG_FILE%/*}/backup"
+        mkdir -p "$backup_dir"
+        
+        # Move old backups
         for ((i=$LOG_MAX_FILES-1; i>=1; i--)); do
             if [ -f "${LOG_FILE}.$i" ]; then
-                mv "${LOG_FILE}.$i" "${LOG_FILE}.$((i+1))"
+                mv "${LOG_FILE}.$i" "${LOG_FILE}.$((i+1))" 2>/dev/null || true
             fi
         done
-        mv "$LOG_FILE" "${LOG_FILE}.1"
-        touch "$LOG_FILE"
+        
+        # Move current log to backup
+        mv "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
+        touch "$LOG_FILE" 2>/dev/null || true
     fi
 }
 
@@ -138,17 +153,25 @@ wait_for_file() {
     local error_msg=${3:-"Failed to find file matching pattern '$pattern' after $max_retries attempts"}
     local retry_count=0
     local file=""
+    local log_dir="/opt/spark/logs"
     
-    while [ -z "$file" ] && [ $retry_count -lt $max_retries ]; do
+    # Ensure log directory exists
+    mkdir -p "$log_dir"
+    
+    while [ $retry_count -lt $max_retries ]; do
+        # Use find with -maxdepth 1 to avoid searching subdirectories
+        file=$(find "$log_dir" -maxdepth 1 -name "$pattern" -type f -print -quit 2>/dev/null)
+        if [ -n "$file" ] && [ -f "$file" ]; then
+            break
+        fi
         sleep 1
-        file=$(find /opt/spark/logs -name "$pattern" -type f | head -n 1)
         retry_count=$((retry_count + 1))
         log_info "Attempt $retry_count/$max_retries to find file matching pattern: $pattern"
     done
     
-    if [ -z "$file" ]; then
+    if [ -z "$file" ] || [ ! -f "$file" ]; then
         log_error "$error_msg"
-        exit 1
+        return 1
     fi
     
     echo "$file"
@@ -170,12 +193,23 @@ check_process() {
 init_logging() {
     # Create log directory if it doesn't exist
     local log_dir=$(dirname "$LOG_FILE")
-    if [ ! -d "$log_dir" ]; then
+    mkdir -p "$log_dir" 2>/dev/null || true
+    
+    # Ensure log directory is writable
+    if [ ! -w "$log_dir" ]; then
+        echo "Warning: Log directory $log_dir is not writable" >&2
+        # Fallback to /tmp if log directory is not writable
+        LOG_FILE="/tmp/spark-container.log"
+        log_dir="/tmp"
         mkdir -p "$log_dir"
     fi
     
     # Create or truncate log file
-    touch "$LOG_FILE"
+    touch "$LOG_FILE" 2>/dev/null || {
+        echo "Warning: Could not create log file $LOG_FILE, falling back to /tmp" >&2
+        LOG_FILE="/tmp/spark-container.log"
+        touch "$LOG_FILE"
+    }
     
     log_info "Logging initialized. Log file: $LOG_FILE"
     log_info "Log level: $(get_log_level_name $LOG_LEVEL)"

@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "spark-arm.fullname" . }}-master
+  name: {{ include "spark-arm.fullname" . }}-worker
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "spark-arm.labels" . | nindent 4 }}
-    app.kubernetes.io/component: master
+    app.kubernetes.io/component: worker
 spec:
-  serviceName: {{ include "spark-arm.fullname" . }}-master
-  replicas: 1
+  serviceName: {{ include "spark-arm.fullname" . }}-worker
+  replicas: {{ .Values.worker.replicas }}
   selector:
     matchLabels:
       {{- include "spark-arm.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: master
+      app.kubernetes.io/component: worker
   template:
     metadata:
       labels:
         {{- include "spark-arm.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: master
+        app.kubernetes.io/component: worker
     spec:
       {{- if .Values.serviceAccount.create }}
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
@@ -31,10 +31,11 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            # Minimal static env block (no templating) to avoid indentation issues.
             - name: SPARK_HOME
               value: /opt/spark
             - name: SPARK_NODE_TYPE
-              value: "master"
+              value: "worker"
             - name: SPARK_MASTER_HOST
               value: "spark-master"
             - name: SPARK_LOCAL_HOSTNAME
@@ -42,7 +43,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
-              value: {{ include "spark-arm.fullname" . }}-master
+              value: {{ include "spark-arm.fullname" . }}-worker
           ports:
             - containerPort: {{ .Values.service.port }}
               name: spark
@@ -52,7 +53,7 @@ spec:
             - name: spark-logs
               mountPath: /opt/spark/logs
           resources:
-            {{- toYaml .Values.master.resources | nindent 12 }}
+            {{- toYaml .Values.worker.resources | nindent 12 }}
           startupProbe:
             tcpSocket:
               port: webui
@@ -72,4 +73,4 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 20
             timeoutSeconds: 10
-            failureThreshold: 3
+            failureThreshold: 3 
