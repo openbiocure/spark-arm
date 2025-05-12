@@ -1,5 +1,6 @@
 # Variables
-IMAGE_NAME ?= ghcr.io/openbiocure/spark-arm
+REGISTRY ?= ghcr.io
+IMAGE_NAME ?= $(REGISTRY)/openbiocure/spark-arm
 VERSION := $(shell cat tag)
 IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
