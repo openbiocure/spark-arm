@@ -36,14 +36,10 @@ jobs:
       - name: Read versions.env and set build args
         id: build-args
         run: |
-          args="{}"
-          while IFS='=' read -r key val; do
-            case $key in
-              \#*|'') continue ;;
-              *) args=$(echo $args | jq --arg k "$key" --arg v "$val" '. + {($k): $v}') ;;
-            esac
-          done < docker/versions.env
-          echo "args=$args" >> $GITHUB_OUTPUT
+          # First source the env file to get variables
+          set -a; . docker/versions.env; set +a
+          # Then create build args with expanded variables, skipping empty lines
+          echo "args=$(cat docker/versions.env | grep -v '^#' | grep -v '^$' | while IFS='=' read -r key val; do echo "--build-arg $key=$(eval echo $val)"; done | tr '\n' ' ')" >> $GITHUB_OUTPUT
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
@@ -76,8 +72,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            ${{ fromJSON(steps.build-args.outputs.args) }}
+          build-args: ${{ steps.build-args.outputs.args }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: true 
