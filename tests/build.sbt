@@ -3,9 +3,9 @@ version := "1.0.0"
 scalaVersion := "2.13.12"
 
 libraryDependencies ++= Seq(
-  "org.apache.spark" %% "spark-sql" % "3.5.3",
-  "org.apache.spark" %% "spark-hive" % "3.5.3",
-  "io.delta" %% "delta-core" % "3.0.0",
+  "org.apache.spark" %% "spark-sql" % "3.5.5",
+  "org.apache.spark" %% "spark-hive" % "3.5.5",
+  "io.delta" %% "delta-core" % "3.3.1",
   "org.apache.hadoop" % "hadoop-aws" % "3.3.6",
   "org.apache.hadoop" % "hadoop-client" % "3.3.6",
   "org.postgresql" % "postgresql" % "42.7.1",

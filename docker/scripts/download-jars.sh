@@ -7,11 +7,30 @@ source /opt/spark/scripts/logging.sh
 # Initialize logging
 init_logging
 
+# Function to verify URL exists
+verify_url() {
+    local url=$1
+    log_info "Verifying URL exists: $url"
+    if curl -s --head --fail "$url" > /dev/null; then
+        log_info "URL exists and is accessible"
+        return 0
+    else
+        log_error "URL does not exist or is not accessible: $url"
+        return 1
+    fi
+}
+
 # Function to download and verify JARs
 download_and_verify_jar() {
     local url=$1
     local output=$2
     local expected_size=${3:-0}
+    
+    # Verify URL exists before attempting download
+    if ! verify_url "$url"; then
+        log_error "JAR not available at URL: $url"
+        return 1
+    fi
     
     log_info "Downloading $url to $output"
     if curl -fSL "$url" -o "$output"; then
@@ -30,61 +49,43 @@ download_and_verify_jar() {
 # Download Delta Lake JARs
 download_delta_jars() {
     local spark_home=$1
-    local delta_version=$2
-    local scala_version=$3
     
     log_info "=== Downloading Delta Lake JARs ==="
     
-    # Core Delta Lake JARs
-    local delta_jars=(
-        # Core components
-        "delta-core_${scala_version}/${delta_version}/delta-core_${scala_version}-${delta_version}.jar"
-        "delta-storage/${delta_version}/delta-storage-${delta_version}.jar"
-        
-        # Spark integration
-        "delta-spark_${scala_version}/${delta_version}/delta-spark_${scala_version}-${delta_version}.jar"
-        "delta-standalone_${scala_version}/${delta_version}/delta-standalone_${scala_version}-${delta_version}.jar"
-        "delta-contribs_${scala_version}/${delta_version}/delta-contribs_${scala_version}-${delta_version}.jar"
-        
-        # Hive integration
-        "delta-hive_${scala_version}/${delta_version}/delta-hive_${scala_version}-${delta_version}.jar"
-    )
+    # Verify URL exists before downloading
+    if ! verify_url "$DELTA_URL_TEMPLATE"; then
+        log_error "Delta Lake JAR not available"
+        return 1
+    fi
     
-    for jar in "${delta_jars[@]}"; do
-        log_info "Attempting to download: $jar"
-        download_and_verify_jar \
-            "https://repo1.maven.org/maven2/io/delta/${jar}" \
-            "${spark_home}/jars/$(basename $jar)" || {
-                log_error "Failed to download $jar"
-                exit 1
-            }
-    done
+    # Download Delta Lake JAR
+    local jar_name=$(basename "$DELTA_URL_TEMPLATE")
+    download_and_verify_jar \
+        "$DELTA_URL_TEMPLATE" \
+        "${spark_home}/jars/${jar_name}" || {
+            log_error "Failed to download Delta Lake JAR"
+            exit 1
+        }
 }
 
-# Download Hadoop AWS and AWS SDK JARs
-download_hadoop_aws_jars() {
+# Download AWS SDK JARs
+download_aws_jars() {
     local spark_home=$1
-    local hadoop_version=$2
-    local aws_sdk_version=$3
     
-    log_info "=== Downloading Hadoop AWS and AWS SDK JARs ==="
+    log_info "=== Downloading AWS SDK JARs ==="
     
-    # Download Hadoop AWS JARs
-    download_and_verify_jar \
-        "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/${hadoop_version}/hadoop-aws-${hadoop_version}.jar" \
-        "${spark_home}/jars/hadoop-aws-${hadoop_version}.jar" || exit 1
+    # Verify URL exists before downloading
+    if ! verify_url "$AWS_BUNDLE_URL_TEMPLATE"; then
+        log_error "AWS SDK Bundle JAR not available"
+        return 1
+    fi
     
-    download_and_verify_jar \
-        "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/${aws_sdk_version}/aws-java-sdk-bundle-${aws_sdk_version}.jar" \
-        "${spark_home}/jars/aws-java-sdk-bundle-${aws_sdk_version}.jar" || exit 1
+    # Download AWS SDK Bundle JAR
+    local bundle_name=$(basename "$AWS_BUNDLE_URL_TEMPLATE")
     
     download_and_verify_jar \
-        "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/${hadoop_version}/hadoop-common-${hadoop_version}.jar" \
-        "${spark_home}/jars/hadoop-common-${hadoop_version}.jar" || exit 1
-    
-    download_and_verify_jar \
-        "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-client/${hadoop_version}/hadoop-client-${hadoop_version}.jar" \
-        "${spark_home}/jars/hadoop-client-${hadoop_version}.jar" || exit 1
+        "$AWS_BUNDLE_URL_TEMPLATE" \
+        "${spark_home}/jars/${bundle_name}" || exit 1
 }
 
 # Verify JARs are present
@@ -96,27 +97,20 @@ verify_jars() {
     log_info "Delta Lake JARs:"
     ls -l ${spark_home}/jars/delta-*.jar || log_error "No Delta Lake JARs found"
     
-    log_info "Hadoop AWS JARs:"
-    ls -l ${spark_home}/jars/hadoop-*.jar || log_error "No Hadoop AWS JARs found"
-    
     log_info "AWS SDK JARs:"
-    ls -l ${spark_home}/jars/aws-*.jar || log_error "No AWS SDK JARs found"
+    ls -l ${spark_home}/jars/aws-java-sdk-bundle-*.jar || log_error "No AWS SDK Bundle JAR found"
 }
 
 # Main function to download all JARs
 download_all_jars() {
     local spark_home=${SPARK_HOME:-/opt/spark}
-    local delta_version=${DELTA_VERSION:-3.3.1}
-    local hadoop_version=${HADOOP_VERSION:-3.3.6}
-    local aws_sdk_version=${AWS_SDK_VERSION:-1.12.262}
-    local scala_version=${SCALA_VERSION:-2.13}
     
     # Create jars directory if it doesn't exist
     mkdir -p "${spark_home}/jars"
     
     # Download all JARs
-    download_delta_jars "$spark_home" "$delta_version" "$scala_version"
-    download_hadoop_aws_jars "$spark_home" "$hadoop_version" "$aws_sdk_version"
+    download_delta_jars "$spark_home"
+    download_aws_jars "$spark_home"
     
     # Verify all JARs
     verify_jars "$spark_home"

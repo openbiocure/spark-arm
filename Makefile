@@ -3,26 +3,38 @@ IMAGE_NAME ?= ghcr.io/openbiocure/spark-arm
 VERSION := $(shell cat tag)
 IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
-DOCKER_BUILD_ARGS ?= --platform linux/arm64
 VALUES_FILE ?= spark-arm/values.yaml
-ENV_FILE ?= .env
+ENV_FILE ?= docker/versions.env
 
-.PHONY: build push clean deploy undeploy logs test test-cluster all help lint port-forward export-env opencert-init
+# Load version variables
+include docker/versions.env
+export
+
+
+.PHONY: build push clean deploy undeploy logs test test-cluster all help lint port-forward export-env opencert-init verify-urls
 
 # Export environment variables from .env file
 export-env:
 	@if [ -f $(ENV_FILE) ]; then \
 		echo "Exporting environment variables from $(ENV_FILE)"; \
-		set -a; \
-		source $(ENV_FILE); \
-		set +a; \
+		export $$(grep -v '^#' $(ENV_FILE) | xargs); \
 	else \
 		echo "Warning: $(ENV_FILE) not found"; \
 	fi
 
 # Build the Docker image
-build:
-	docker build $(DOCKER_BUILD_ARGS) -t $(IMAGE_NAME):$(IMAGE_TAG) -f docker/Dockerfile .
+build: verify-urls
+	@echo "Building Docker image..."
+	@ARGS=""; \
+	set -a; . docker/versions.env; set +a; \
+	while IFS='=' read -r key val; do \
+		case $$key in \
+			\#*|'') continue ;; \
+			*) val=$$(eval echo $$val); ARGS="$$ARGS --build-arg $$key=$$val" ;; \
+		esac; \
+	done < docker/versions.env; \
+	echo docker build --platform linux/arm64 $$ARGS -f docker/Dockerfile .; \
+	docker build --platform linux/arm64 $$ARGS -f docker/Dockerfile .
 	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):latest
 
 # Push the Docker image to registry
@@ -93,19 +105,38 @@ port-forward: export-env
 	@echo "- UI: http://localhost:8080"
 	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080
 
+# Verify URLs
+verify-urls: export-env
+	@echo "Verifying download URLs..."
+	@chmod +x docker/scripts/verify-urls.sh
+	@./docker/scripts/verify-urls.sh
 
 # Show help
 help:
 	@echo "Available commands:"
-	@echo "  make build            - Build the Docker image"
+	@echo ""
+	@echo "Build and Verification:"
+	@echo "  make verify-urls      - Verify all download URLs before building"
+	@echo "  make build            - Build the Docker image (includes URL verification)"
 	@echo "  make push             - Push the Docker image to registry"
 	@echo "  make clean            - Clean up build artifacts"
-	@echo "  make lint             - Lint Helm charts and validate templates"
+	@echo ""
+	@echo "Deployment and Management:"
 	@echo "  make deploy           - Deploy the Spark cluster"
 	@echo "  make undeploy         - Undeploy the Spark cluster"
-	@echo "  make logs             - Get logs from Spark pods"
+	@echo "  make all              - Build, push and deploy"
+	@echo ""
+	@echo "Testing and Validation:"
+	@echo "  make lint             - Lint Helm charts and validate templates"
 	@echo "  make test             - Test cluster readiness"
 	@echo "  make test-cluster     - Run comprehensive cluster tests"
-	@echo "  make all              - Build, push and deploy"
-	@echo "  make help             - Show this help message"
+	@echo ""
+	@echo "Monitoring and Debugging:"
+	@echo "  make logs             - Get logs from Spark pods"
+	@echo "  make port-forward     - Forward Spark master ports (7077, 8080)"
+	@echo ""
+	@echo "Environment:"
+	@echo "  make export-env       - Export environment variables from .env file"
+	@echo ""
+	@echo "For more information, see the README.md file"
 

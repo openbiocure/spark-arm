@@ -7,6 +7,19 @@ source /opt/spark/scripts/logging.sh
 # Initialize logging
 init_logging
 
+# Function to verify URL exists
+verify_url() {
+    local url=$1
+    log_info "Verifying URL exists: $url"
+    if curl -s --head --fail "$url" > /dev/null; then
+        log_info "URL exists and is accessible"
+        return 0
+    else
+        log_error "URL does not exist or is not accessible: $url"
+        return 1
+    fi
+}
+
 # Function to download and install Spark
 download_and_install_spark() {
     local spark_version=$1
@@ -16,11 +29,20 @@ download_and_install_spark() {
     
     log_info "Starting Spark download process for version ${spark_version}"
     
+    # Construct the download URL
+    local spark_url="https://dlcdn.apache.org/spark/spark-${spark_version}/spark-${spark_version}-bin-hadoop3-scala2.13.tgz"
+    
+    # Verify URL exists before attempting download
+    if ! verify_url "$spark_url"; then
+        log_error "Spark version ${spark_version} is not available at the expected URL"
+        return 1
+    fi
+    
     while [ $attempt -le $max_attempts ]; do
         log_info "Attempt ${attempt} of ${max_attempts} to download Spark..."
         
         if curl -fSL --retry 3 --retry-delay 5 \
-            "https://dlcdn.apache.org/spark/spark-${spark_version}/spark-${spark_version}-bin-hadoop3-scala2.13.tgz" \
+            "$spark_url" \
             -o /tmp/spark.tgz; then
             
             log_info "Download successful"

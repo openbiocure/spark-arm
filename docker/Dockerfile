@@ -1,8 +1,44 @@
-# Build stage for Hadoop native libraries
-FROM eclipse-temurin:17-jdk-jammy AS hadoop-builder
+# Define build arguments for versions
+ARG SPARK_VERSION
+ARG HADOOP_VERSION
+ARG DELTA_VERSION
+ARG AWS_SDK_VERSION
+ARG SCALA_VERSION
+ARG SPARK_URL_TEMPLATE
+ARG HADOOP_URL_TEMPLATE
+ARG DELTA_URL_TEMPLATE
+ARG AWS_BUNDLE_URL_TEMPLATE
+ARG AWS_S3_URL_TEMPLATE
 
-# Set environment variables
-ENV HADOOP_VERSION=3.3.6
+# Base stage with common environment variables
+FROM eclipse-temurin:17-jdk-jammy AS base
+# Common environment variables that don't depend on ARGs
+ENV SPARK_HOME=/opt/spark \
+    PATH=$PATH:/opt/spark/bin \
+    HADOOP_HOME=/opt/hadoop \
+    LD_LIBRARY_PATH=/opt/hadoop/lib/native \
+    SPARK_CLASSPATH=/opt/spark/jars/*
+
+# URL verification stage
+FROM base AS url-verifier
+# Redeclare ARGs used in this stage
+ARG SPARK_VERSION
+ARG HADOOP_VERSION
+ARG DELTA_VERSION
+ARG AWS_SDK_VERSION
+ARG SCALA_VERSION
+
+# Install curl for URL verification
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Copy and run verification script
+COPY docker/scripts/verify-urls.sh /verify-urls.sh
+RUN chmod +x /verify-urls.sh && /verify-urls.sh
+
+# Build stage for Hadoop native libraries
+FROM base AS hadoop-builder
+# Redeclare ARGs used in this stage
+ARG HADOOP_VERSION
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -17,20 +53,30 @@ RUN mkdir -p /opt/hadoop/lib/native && \
     rm -rf /tmp/hadoop.tar.gz /tmp/hadoop-${HADOOP_VERSION}
 
 # Final stage
-FROM eclipse-temurin:17-jdk-jammy
+FROM base
+# Redeclare all ARGs used in this stage
+ARG SPARK_VERSION
+ARG HADOOP_VERSION
+ARG DELTA_VERSION
+ARG AWS_SDK_VERSION
+ARG SCALA_VERSION
+ARG SPARK_URL_TEMPLATE
+ARG HADOOP_URL_TEMPLATE
+ARG DELTA_URL_TEMPLATE
+ARG AWS_BUNDLE_URL_TEMPLATE
+ARG AWS_S3_URL_TEMPLATE
 
-# Set environment variables
-# Using Spark 3.5.3 with Delta Lake 3.0.0 for latest features
-ENV SPARK_VERSION=3.5.3
-ENV HADOOP_VERSION=3.3.6
-ENV DELTA_VERSION=3.0.0
-ENV AWS_SDK_VERSION=1.12.262
-ENV SCALA_VERSION=2.13
-ENV SPARK_HOME=/opt/spark
-ENV PATH=$PATH:$SPARK_HOME/bin
-ENV HADOOP_HOME=/opt/hadoop
-ENV LD_LIBRARY_PATH=/opt/hadoop/lib/native
-ENV SPARK_CLASSPATH=/opt/spark/jars/*
+# Set version environment variables
+ENV SPARK_VERSION=${SPARK_VERSION} \
+    HADOOP_VERSION=${HADOOP_VERSION} \
+    DELTA_VERSION=${DELTA_VERSION} \
+    AWS_SDK_VERSION=${AWS_SDK_VERSION} \
+    SCALA_VERSION=${SCALA_VERSION} \
+    SPARK_URL_TEMPLATE=${SPARK_URL_TEMPLATE} \
+    HADOOP_URL_TEMPLATE=${HADOOP_URL_TEMPLATE} \
+    DELTA_URL_TEMPLATE=${DELTA_URL_TEMPLATE} \
+    AWS_BUNDLE_URL_TEMPLATE=${AWS_BUNDLE_URL_TEMPLATE} \
+    AWS_S3_URL_TEMPLATE=${AWS_S3_URL_TEMPLATE}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -56,11 +102,8 @@ RUN ${SPARK_HOME}/scripts/download-spark.sh ${SPARK_VERSION} ${SPARK_HOME}
 # Download all required JARs
 RUN ${SPARK_HOME}/scripts/download-jars.sh
 
-# Create spark-defaults.conf with necessary configurations
-RUN echo "spark.driver.extraClassPath /opt/spark/jars/*" > ${SPARK_HOME}/conf/spark-defaults.conf && \
-    echo "spark.executor.extraClassPath /opt/spark/jars/*" >> ${SPARK_HOME}/conf/spark-defaults.conf && \
-    echo "spark.sql.extensions io.delta.sql.DeltaSparkSessionExtension" >> ${SPARK_HOME}/conf/spark-defaults.conf && \
-    echo "spark.sql.catalog.spark_catalog org.apache.spark.sql.delta.catalog.DeltaCatalog" >> ${SPARK_HOME}/conf/spark-defaults.conf
+# Create spark-defaults.conf
+RUN ${SPARK_HOME}/scripts/create-spark-defaults.sh
 
 # Set working directory
 WORKDIR ${SPARK_HOME}
