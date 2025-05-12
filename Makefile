@@ -25,7 +25,8 @@ export-env:
 # Build the Docker image
 build: verify-urls
 	@echo "Building Docker image..."
-	@ARGS=""; \
+	@TAG=$$(cat tag); \
+	ARGS=""; \
 	set -a; . docker/versions.env; set +a; \
 	while IFS='=' read -r key val; do \
 		case $$key in \
@@ -33,9 +34,10 @@ build: verify-urls
 			*) val=$$(eval echo $$val); ARGS="$$ARGS --build-arg $$key=$$val" ;; \
 		esac; \
 	done < docker/versions.env; \
-	echo docker build --platform linux/arm64 $$ARGS -f docker/Dockerfile .; \
-	docker build --platform linux/arm64 $$ARGS -f docker/Dockerfile .
-	docker tag $(IMAGE_NAME):$(IMAGE_TAG) $(IMAGE_NAME):latest
+	echo docker build --platform linux/arm64 -t spark-arm:$$TAG $$ARGS -f docker/Dockerfile .; \
+	docker build --platform linux/arm64 -t spark-arm:$$TAG $$ARGS -f docker/Dockerfile .; \
+	docker tag spark-arm:$$TAG $(IMAGE_NAME):$(IMAGE_TAG); \
+	docker tag spark-arm:$$TAG $(IMAGE_NAME):latest
 
 # Push the Docker image to registry
 push:
