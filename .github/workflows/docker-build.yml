@@ -12,11 +12,6 @@ on:
       - 'stable'
       - 'main'
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-  TOKEN: ${{ secrets.ORG_PACKAGE_TOKEN }}
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -43,13 +38,11 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ env.TOKEN }}
+          password: ${{ secrets.ORG_PACKAGE_TOKEN }}
 
-      - name: Build Docker image
-        run: make build
-
-      - name: Push to GitHub Container Registry
+      - name: Build and Push
         run: |
+          make build
           TAG=$(cat tag)
           docker tag spark-arm:$TAG ghcr.io/openbiocure/spark-arm:$TAG
           docker tag spark-arm:$TAG ghcr.io/openbiocure/spark-arm:latest
