@@ -5,22 +5,29 @@ VERSION := $(shell cat tag)
 IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
 VALUES_FILE ?= spark-arm/values.yaml
-ENV_FILE ?= docker/versions.env
+VERSIONS_ENV_FILE ?= docker/versions.env
+ENV_FILE ?= .env
 
 # Load version variables
-include docker/versions.env
+include $(VERSIONS_ENV_FILE)
 export
 
 
-.PHONY: build push clean deploy undeploy logs test test-cluster all help lint port-forward export-env opencert-init verify-urls
+.PHONY: build push clean deploy undeploy logs test test-cluster test-local all help lint port-forward export-env opencert-init verify-urls
 
-# Export environment variables from .env file
+# Export environment variables from both .env files
 export-env:
 	@if [ -f $(ENV_FILE) ]; then \
 		echo "Exporting environment variables from $(ENV_FILE)"; \
 		export $$(grep -v '^#' $(ENV_FILE) | xargs); \
 	else \
 		echo "Warning: $(ENV_FILE) not found"; \
+	fi
+	@if [ -f $(VERSIONS_ENV_FILE) ]; then \
+		echo "Exporting environment variables from $(VERSIONS_ENV_FILE)"; \
+		export $$(grep -v '^#' $(VERSIONS_ENV_FILE) | xargs); \
+	else \
+		echo "Warning: $(VERSIONS_ENV_FILE) not found"; \
 	fi
 
 # Build the Docker image
@@ -75,28 +82,24 @@ test:
 	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE) --timeout=300s
 
 # Run comprehensive cluster tests
-test-cluster: export-env
-	@echo "Generating test scripts in ConfigMap..."
-	@./scripts/update-test-configmap.sh
-	@echo "Cleaning up any existing test jobs..."
-	@kubectl delete job spark-test-job -n spark --ignore-not-found=true
-	@echo "Running tests in the cluster..."
-	@helm upgrade --install spark-arm ./spark-arm \
-		--namespace spark \
-		--set test.enabled=true \
-		--set minio.endpoint="${MINIO_ENDPOINT}" \
-		--set minio.credentials.accessKey="${MINIO_ACCESS_KEY}" \
-		--set minio.credentials.secretKey="${MINIO_SECRET_KEY}" \
-		--set minio.bucket="${MINIO_BUCKET:-spark-data}" \
-		--set hive.metastore.host="${POSTGRES_HOST}" \
-		--set hive.metastore.port="${POSTGRES_PORT:-5432}" \
-		--set hive.metastore.database="${POSTGRES_DB:-hive}" \
-		--set hive.metastore.username="${POSTGRES_USER}" \
-		--set hive.metastore.password="${POSTGRES_PASSWORD}"
-	@echo "Waiting for test job to complete..."
-	@kubectl wait --for=condition=complete job/spark-test-job -n spark --timeout=300s
-	@echo "Test job logs:"
-	@kubectl logs -n spark -l job-name=spark-test-job --tail=-1
+test-cluster:
+	@chmod +x tests/run_tests.sh
+	@set -a; . debug.env; set +a; \
+	export $$(grep -v '^#' .env | cut -d= -f1); \
+	./tests/run_tests.sh
+
+# Run tests locally with port forwarding
+test-local: export-env
+	@echo "Setting up port forwarding for Spark master..."
+	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080 & echo $$! > .port-forward.pid
+	@echo "Waiting for ports to be ready..."
+	@sleep 5
+	@echo "Running local tests..."
+	@cd tests && set -a; . ../debug.env; set +a; \
+		SPARK_MASTER_URL="local[*]" sbt "runMain org.openbiocure.spark.TestSparkCluster" || (cd .. && kill $$(cat .port-forward.pid) 2>/dev/null; rm -f .port-forward.pid; exit 1)
+	@echo "Cleaning up port forwarding..."
+	@kill $$(cat .port-forward.pid) 2>/dev/null || true
+	@rm -f .port-forward.pid
 
 # Build, push and deploy
 all: build push deploy
@@ -132,7 +135,8 @@ help:
 	@echo "Testing and Validation:"
 	@echo "  make lint             - Lint Helm charts and validate templates"
 	@echo "  make test             - Test cluster readiness"
-	@echo "  make test-cluster     - Run comprehensive cluster tests"
+	@echo "  make test-local       - Run tests locally with port forwarding"
+	@echo "  make test-cluster     - Run comprehensive cluster tests in pod"
 	@echo ""
 	@echo "Monitoring and Debugging:"
 	@echo "  make logs             - Get logs from Spark pods"

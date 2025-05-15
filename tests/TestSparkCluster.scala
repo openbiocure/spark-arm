@@ -5,135 +5,230 @@ import org.apache.spark.sql.types.{StructType, StructField, StringType, IntegerT
 import org.apache.spark.sql.functions._
 import io.delta.tables._
 import scala.util.{Try, Success, Failure}
+import org.apache.spark.internal.Logging
 
-object TestSparkCluster {
-  // Logger setup
-  private val logger = org.apache.log4j.LogManager.getLogger(this.getClass)
+object TestSparkCluster extends Logging {
+  private var spark: SparkSession = _
+
+  def main(args: Array[String]): Unit = {
+    logInfo("Starting Spark Cluster Tests...")
+    
+    try {
+      spark = createSparkSession()
+      
+      val tests = Seq(
+        ("Basic Spark", () => testBasicSpark(spark)),
+        ("MinIO", () => testMinioConnectivity(spark)),
+        ("Hive", () => testHiveMetastore(spark)),
+        ("Delta Lake", () => testDeltaLake(spark))
+      )
+      
+      var allPassed = true
+      for ((testName, testFunc) <- tests) {
+        try {
+          logInfo(s"\nRunning $testName test...")
+          if (testFunc()) {
+            logInfo(s"✓ $testName test passed")
+          } else {
+            logError(s"✗ $testName test failed")
+            allPassed = false
+          }
+        } catch {
+          case e: Exception =>
+            logError(s"✗ $testName test failed: ${e.getMessage}")
+            allPassed = false
+        }
+      }
+      
+      logInfo("\n=== Test Summary ===")
+      for ((testName, _) <- tests) {
+        val status = if (allPassed) "PASSED" else "FAILED"
+        logInfo(s"$testName: $status")
+      }
+      
+      sys.exit(if (allPassed) 0 else 1)
+      
+    } catch {
+      case e: Exception =>
+        logError(s"Error during test execution: ${e.getMessage}")
+        sys.exit(1)
+    } finally {
+      if (spark != null) {
+        spark.stop()
+      }
+    }
+  }
 
   def verifyDeltaJars(): Unit = {
-    logger.info("=== Verifying Delta Lake JARs ===")
-    val jarPath = "/opt/spark/jars"
-    val deltaJars = new java.io.File(jarPath).listFiles()
-      .filter(_.getName.startsWith("delta-"))
-      .map(_.getName)
+    logInfo("=== Verifying Delta Lake JARs ===")
     
-    logger.info(s"Found Delta JARs in $jarPath:")
-    deltaJars.foreach(jar => logger.info(s"- $jar"))
-    
-    if (deltaJars.isEmpty) {
-      throw new RuntimeException("No Delta Lake JARs found in /opt/spark/jars/")
+    // For local development, skip jar verification
+    if (sys.env.getOrElse("SPARK_MASTER_URL", "").startsWith("local")) {
+      logInfo("Running in local mode, skipping Delta JAR verification")
+      return
     }
     
-    logger.info("\nClasspath environment variables:")
-    logger.info(s"SPARK_CLASSPATH: ${sys.env.getOrElse("SPARK_CLASSPATH", "Not set")}")
-    logger.info(s"SPARK_HOME: ${sys.env.getOrElse("SPARK_HOME", "Not set")}")
-    logger.info(s"SPARK_DAEMON_JAVA_OPTS: ${sys.env.getOrElse("SPARK_DAEMON_JAVA_OPTS", "Not set")}")
+    // Only verify jars in cluster mode
+    val jarPath = "/opt/spark/jars"
+    if (!new java.io.File(jarPath).exists()) {
+      logInfo(s"Jar path $jarPath does not exist, skipping verification")
+      return
+    }
+    
+    try {
+      val deltaJars = new java.io.File(jarPath).listFiles()
+        .filter(_.getName.startsWith("delta-"))
+        .map(_.getName)
+      
+      logInfo(s"Found Delta JARs in $jarPath:")
+      deltaJars.foreach(jar => logInfo(s"- $jar"))
+      
+      if (deltaJars.isEmpty) {
+        throw new RuntimeException("No Delta Lake JARs found in /opt/spark/jars/")
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Error verifying Delta JARs: ${e.getMessage}")
+        throw e
+    }
+    
+    logInfo("\nClasspath environment variables:")
+    logInfo(s"SPARK_CLASSPATH: ${sys.env.getOrElse("SPARK_CLASSPATH", "Not set")}")
+    logInfo(s"SPARK_HOME: ${sys.env.getOrElse("SPARK_HOME", "Not set")}")
+    logInfo(s"SPARK_DAEMON_JAVA_OPTS: ${sys.env.getOrElse("SPARK_DAEMON_JAVA_OPTS", "Not set")}")
+  }
+
+  def initializeHiveMetastore(): Unit = {
+    logInfo("\n=== Initializing Hive Metastore Schema ===")
+    
+    try {
+      logInfo("Initializing Hive metastore schema...")
+      // Run schematool to initialize the schema
+      val schematoolCmd = Array(
+        "/opt/spark/bin/schematool",
+        "-dbType", "postgres",
+        "-initSchema",
+        "-verbose"
+      )
+      
+      val schematoolProcess = Runtime.getRuntime.exec(schematoolCmd)
+      val schematoolOutput = scala.io.Source.fromInputStream(schematoolProcess.getInputStream).mkString
+      val schematoolError = scala.io.Source.fromInputStream(schematoolProcess.getErrorStream).mkString
+      val schematoolExitCode = schematoolProcess.waitFor()
+      
+      if (schematoolExitCode == 0) {
+        logInfo("Successfully initialized Hive metastore schema")
+        logInfo(schematoolOutput)
+      } else {
+        logError(s"Failed to initialize Hive metastore schema: $schematoolError")
+        throw new RuntimeException("Failed to initialize Hive metastore schema")
+      }
+    } catch {
+      case e: Exception =>
+        logError(s"Error initializing Hive metastore: ${e.getMessage}")
+        throw e
+    }
   }
 
   def createSparkSession(): SparkSession = {
     verifyDeltaJars()
     
-    val jarPath = "/opt/spark/jars"
-    val deltaJars = new java.io.File(jarPath).listFiles()
-      .filter(_.getName.startsWith("delta-"))
-      .map(_.getAbsolutePath)
-      .mkString(",")
+    val isLocalMode = sys.env.getOrElse("SPARK_MASTER_URL", "").startsWith("local")
+    logInfo(s"\nRunning in ${if (isLocalMode) "local" else "cluster"} mode")
     
-    logger.info(s"\nUsing Delta JARs: $deltaJars")
-    logger.info("\nSetting up Spark session with debug logging...")
+    if (!isLocalMode) {
+      initializeHiveMetastore()
+      createMinioBucket()
+    }
     
-    SparkSession.builder()
+    logInfo("\nSetting up Spark session with debug logging...")
+    
+    val builder = SparkSession.builder()
       .appName("SparkClusterTest")
-      .master(sys.env.getOrElse("SPARK_MASTER_URL", "spark://spark-arm-master:7077"))
-      .config("spark.jars", deltaJars)
+      .master(sys.env.getOrElse("SPARK_MASTER_URL", "local[*]"))
       .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-      .config("spark.driver.extraJavaOptions", "-Dlog4j.configuration=file:/opt/spark/conf/log4j2.xml -Dlog4j2.debug=true")
-      .config("spark.executor.extraJavaOptions", "-Dlog4j.configuration=file:/opt/spark/conf/log4j2.xml -Dlog4j2.debug=true")
       .config("spark.driver.log.level", "DEBUG")
       .config("spark.executor.log.level", "DEBUG")
+      // Always include MinIO and PostgreSQL configs
+      .config("spark.hadoop.fs.s3a.endpoint", sys.env("AWS_ENDPOINT_URL"))
+      .config("spark.hadoop.fs.s3a.access.key", sys.env("AWS_ACCESS_KEY_ID"))
+      .config("spark.hadoop.fs.s3a.secret.key", sys.env("AWS_SECRET_ACCESS_KEY"))
+      .config("spark.hadoop.fs.s3a.path.style.access", "true")
+      .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+      .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
       .config("spark.sql.warehouse.dir", s"s3a://${sys.env("MINIO_BUCKET")}/warehouse")
       .config("spark.sql.catalogImplementation", "hive")
       .config("spark.hadoop.javax.jdo.option.ConnectionURL", s"jdbc:postgresql://${sys.env("POSTGRES_HOST")}:${sys.env("POSTGRES_PORT")}/${sys.env("POSTGRES_DB")}")
       .config("spark.hadoop.javax.jdo.option.ConnectionDriverName", "org.postgresql.Driver")
       .config("spark.hadoop.javax.jdo.option.ConnectionUserName", sys.env("POSTGRES_USER"))
       .config("spark.hadoop.javax.jdo.option.ConnectionPassword", sys.env("POSTGRES_PASSWORD"))
-      .config("spark.hadoop.datanucleus.schema.autoCreateAll", "true")
-      .config("spark.hadoop.datanucleus.autoCreateSchema", "true")
-      .config("spark.hadoop.datanucleus.fixedDatastore", "false")
-      .config("spark.hadoop.datanucleus.autoCreateTables", "true")
-      .config("spark.delta.logStore.class", "org.apache.spark.sql.delta.storage.S3SingleDriverLogStore")
-      .config("spark.delta.merge.repartitionBeforeWrite", "true")
-      .config("spark.delta.autoOptimize.optimizeWrite", "true")
-      .config("spark.delta.autoOptimize.autoCompact", "true")
-      .config("spark.delta.storage.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-      .config("spark.delta.storage.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
-      .config("spark.delta.warehouse.dir", s"s3a://${sys.env("MINIO_BUCKET")}/delta")
-      .config("spark.delta.optimizeWrite.enabled", "true")
-      .config("spark.delta.autoCompact.enabled", "true")
-      .config("spark.delta.optimizeWrite.numShuffleBlocks", "200")
-      .config("spark.delta.optimizeWrite.targetFileSize", "128m")
-      .config("spark.delta.concurrent.writes.enabled", "true")
-      .config("spark.delta.concurrent.writes.maxConcurrentWrites", "10")
-      .config("spark.delta.schema.autoMerge.enabled", "true")
-      .config("spark.delta.timeTravel.enabled", "true")
-      .config("spark.delta.timeTravel.retentionPeriod", "168h")
-      .getOrCreate()
+    
+    if (isLocalMode) {
+      builder
+        .config("spark.driver.extraJavaOptions", "-Djava.security.manager=disallow")
+        .config("spark.executor.extraJavaOptions", "-Djava.security.manager=disallow")
+        .config("spark.local.ip", "127.0.0.1")
+        .config("spark.driver.host", "127.0.0.1")
+        .config("spark.driver.bindAddress", "127.0.0.1")
+    }
+    
+    builder.getOrCreate()
   }
 
   def testBasicSpark(spark: SparkSession): Boolean = {
-    logger.info("\n=== Testing Basic Spark Functionality ===")
+    logInfo("\n=== Testing Basic Spark Functionality ===")
     
     val df = createTestDataFrame(spark)
-    logger.info("Test DataFrame:")
+    logInfo("Test DataFrame:")
     df.show()
     
     true
   }
 
   def testMinioConnectivity(spark: SparkSession): Boolean = {
-    logger.info("\n=== Testing MinIO Connectivity ===")
+    logInfo("\n=== Testing MinIO Connectivity ===")
     
     val df = createTestDataFrame(spark)
     val minioPath = s"s3a://${sys.env("MINIO_BUCKET")}/test/minio_test"
     
-    logger.info(s"Writing test data to $minioPath")
+    logInfo(s"Writing test data to $minioPath")
     df.write
       .mode("overwrite")
       .parquet(minioPath)
     
     val readDf = spark.read.parquet(minioPath)
-    logger.info("Read DataFrame from MinIO:")
+    logInfo("Read DataFrame from MinIO:")
     readDf.show()
     
     true
   }
 
   def testHiveMetastore(spark: SparkSession): Boolean = {
-    logger.info("\n=== Testing Hive Metastore ===")
+    logInfo("\n=== Testing Hive Metastore ===")
     
     val df = createTestDataFrame(spark)
     val tableName = "test_hive_table"
     
-    logger.info(s"Creating Hive table: $tableName")
+    logInfo(s"Creating Hive table: $tableName")
     df.write
       .mode("overwrite")
       .saveAsTable(tableName)
     
     val readDf = spark.table(tableName)
-    logger.info("Read DataFrame from Hive:")
+    logInfo("Read DataFrame from Hive:")
     readDf.show()
     
     true
   }
 
   def testDeltaLake(spark: SparkSession): Boolean = {
-    logger.info("\n=== Testing Delta Lake ===")
+    logInfo("\n=== Testing Delta Lake ===")
     
     val df = createTestDataFrame(spark)
     val deltaPath = s"s3a://${sys.env("MINIO_BUCKET")}/delta/test_delta"
     
-    logger.info(s"Creating Delta table at $deltaPath")
+    logInfo(s"Creating Delta table at $deltaPath")
     df.write
       .format("delta")
       .mode("overwrite")
@@ -143,11 +238,11 @@ object TestSparkCluster {
       .format("delta")
       .load(deltaPath)
     
-    logger.info("Initial Delta table:")
+    logInfo("Initial Delta table:")
     readDf.show()
     
     val updatesDf = createTestDataFrame(spark)
-    logger.info("Updating Delta table...")
+    logInfo("Updating Delta table...")
     
     val deltaTable = DeltaTable.forPath(spark, deltaPath)
     deltaTable.alias("target")
@@ -165,7 +260,7 @@ object TestSparkCluster {
       .format("delta")
       .load(deltaPath)
     
-    logger.info("Updated Delta table:")
+    logInfo("Updated Delta table:")
     updatedDf.show()
     
     true
@@ -186,53 +281,40 @@ object TestSparkCluster {
     spark.createDataFrame(data).toDF("id", "name")
   }
 
-  def main(args: Array[String]): Unit = {
-    logger.info("Starting Spark Cluster Tests...")
-    var spark: SparkSession = null
+  private def createMinioBucket(): Unit = {
+    logInfo("\n=== Creating MinIO Bucket if it doesn't exist ===")
+    val bucket = sys.env("MINIO_BUCKET")
     
     try {
-      spark = createSparkSession()
+      // Create a temporary script to create the bucket
+      val script = s"""
+        |#!/bin/bash
+        |mc alias set myminio ${sys.env("AWS_ENDPOINT_URL")} ${sys.env("AWS_ACCESS_KEY_ID")} ${sys.env("AWS_SECRET_ACCESS_KEY")}
+        |mc mb myminio/$bucket --ignore-existing
+        |mc ls myminio/$bucket
+        |""".stripMargin
       
-      val tests = Seq(
-        ("Basic Spark", testBasicSpark _),
-        ("MinIO", testMinioConnectivity _),
-        ("Hive", testHiveMetastore _),
-        ("Delta Lake", testDeltaLake _)
-      )
+      val scriptFile = new java.io.File("/tmp/create_bucket.sh")
+      val writer = new java.io.FileWriter(scriptFile)
+      writer.write(script)
+      writer.close()
+      scriptFile.setExecutable(true)
       
-      var allPassed = true
-      for ((testName, testFunc) <- tests) {
-        try {
-          logger.info(s"\nRunning $testName test...")
-          if (testFunc(spark)) {
-            logger.info(s"✓ $testName test passed")
-          } else {
-            logger.error(s"✗ $testName test failed")
-            allPassed = false
-          }
-        } catch {
-          case e: Exception =>
-            logger.error(s"✗ $testName test failed: ${e.getMessage}")
-            allPassed = false
-        }
+      // Execute the script
+      val process = Runtime.getRuntime.exec(Array("/bin/bash", scriptFile.getAbsolutePath))
+      val exitCode = process.waitFor()
+      
+      if (exitCode == 0) {
+        logInfo(s"Successfully created/verified bucket: $bucket")
+      } else {
+        val error = scala.io.Source.fromInputStream(process.getErrorStream).mkString
+        logError(s"Failed to create bucket: $error")
+        throw new RuntimeException(s"Failed to create MinIO bucket: $bucket")
       }
-      
-      logger.info("\n=== Test Summary ===")
-      for ((testName, _) <- tests) {
-        val status = if (allPassed) "PASSED" else "FAILED"
-        logger.info(s"$testName: $status")
-      }
-      
-      sys.exit(if (allPassed) 0 else 1)
-      
     } catch {
       case e: Exception =>
-        logger.error(s"Error during test execution: ${e.getMessage}")
-        sys.exit(1)
-    } finally {
-      if (spark != null) {
-        spark.stop()
-      }
+        logError(s"Error creating MinIO bucket: ${e.getMessage}")
+        throw e
     }
   }
 } 

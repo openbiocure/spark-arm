@@ -14,18 +14,18 @@ test:
 minio:
   enabled: true
   # External MinIO service configuration
-  endpoint: "${MINIO_ENDPOINT}"
+  endpoint: "${AWS_ENDPOINT_URL}"
   bucket: "${MINIO_BUCKET:-spark-data}" # Default to spark-data if not set
   # MinIO credentials (should be provided via secret in production)
   credentials:
-    accessKey: "${MINIO_ACCESS_KEY}" # Leave empty, should be provided via secret
-    secretKey: "${MINIO_SECRET_KEY}" # Leave empty, should be provided via secret
+    accessKey: "${AWS_ACCESS_KEY_ID}" # Leave empty, should be provided via secret
+    secretKey: "${AWS_SECRET_ACCESS_KEY}" # Leave empty, should be provided via secret
   # Spark integration settings
   spark:
     hadoop:
-      fs.s3a.endpoint: "${MINIO_ENDPOINT}"
-      fs.s3a.access.key: "${MINIO_ACCESS_KEY}"
-      fs.s3a.secret.key: "${MINIO_SECRET_KEY}"
+      fs.s3a.endpoint: "${AWS_ENDPOINT_URL}"
+      fs.s3a.access.key: "${AWS_ACCESS_KEY_ID}"
+      fs.s3a.secret.key: "${AWS_SECRET_ACCESS_KEY}"
       fs.s3a.path.style.access: "true"
       fs.s3a.connection.ssl.enabled: "false"
       fs.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
@@ -60,18 +60,18 @@ worker:
   enabled: true
   # Number of worker pods to create
   replicaCount: 3 # Must be set to 3 for three worker nodes
-  cores: "2"
+  cores: "4"
   memory: "2048m"
   resources:
     limits:
-      cpu: "2"
+      cpu: "4"
       memory: "2Gi"
     requests:
-      cpu: "1"
+      cpu: "2"
       memory: "1Gi"
   env:
     SPARK_MASTER_PORT: "7077"
-    SPARK_WORKER_CORES: "2"
+    SPARK_WORKER_CORES: "4"
     SPARK_WORKER_MEMORY: "2048m"
 
 # Image configuration
