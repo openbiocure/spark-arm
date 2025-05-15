@@ -178,92 +178,112 @@ object TestSparkCluster extends Logging {
 
   def testBasicSpark(spark: SparkSession): Boolean = {
     logInfo("\n=== Testing Basic Spark Functionality ===")
-    
-    val df = createTestDataFrame(spark)
-    logInfo("Test DataFrame:")
-    df.show()
-    
-    true
+    try {
+      val df = createTestDataFrame(spark)
+      logInfo("Test DataFrame:")
+      df.show()
+      true
+    } catch {
+      case e: Exception =>
+        logError(s"Basic Spark test failed: ${e.getMessage}")
+        logError(s"Stack trace: ${e.getStackTrace.mkString("\n")}")
+        false
+    }
   }
 
   def testMinioConnectivity(spark: SparkSession): Boolean = {
     logInfo("\n=== Testing MinIO Connectivity ===")
-    
-    val df = createTestDataFrame(spark)
-    val minioPath = s"s3a://${sys.env("MINIO_BUCKET")}/test/minio_test"
-    
-    logInfo(s"Writing test data to $minioPath")
-    df.write
-      .mode("overwrite")
-      .parquet(minioPath)
-    
-    val readDf = spark.read.parquet(minioPath)
-    logInfo("Read DataFrame from MinIO:")
-    readDf.show()
-    
-    true
+    try {
+      val df = createTestDataFrame(spark)
+      val minioPath = s"s3a://${sys.env("MINIO_BUCKET")}/test/minio_test"
+      
+      logInfo(s"Writing test data to $minioPath")
+      df.write
+        .mode("overwrite")
+        .parquet(minioPath)
+      
+      val readDf = spark.read.parquet(minioPath)
+      logInfo("Read DataFrame from MinIO:")
+      readDf.show()
+      true
+    } catch {
+      case e: Exception =>
+        logError(s"MinIO test failed: ${e.getMessage}")
+        logError(s"Stack trace: ${e.getStackTrace.mkString("\n")}")
+        false
+    }
   }
 
   def testHiveMetastore(spark: SparkSession): Boolean = {
     logInfo("\n=== Testing Hive Metastore ===")
-    
-    val df = createTestDataFrame(spark)
-    val tableName = "test_hive_table"
-    
-    logInfo(s"Creating Hive table: $tableName")
-    df.write
-      .mode("overwrite")
-      .saveAsTable(tableName)
-    
-    val readDf = spark.table(tableName)
-    logInfo("Read DataFrame from Hive:")
-    readDf.show()
-    
-    true
+    try {
+      val df = createTestDataFrame(spark)
+      val tableName = "test_hive_table"
+      
+      logInfo(s"Creating Hive table: $tableName")
+      df.write
+        .mode("overwrite")
+        .saveAsTable(tableName)
+      
+      val readDf = spark.table(tableName)
+      logInfo("Read DataFrame from Hive:")
+      readDf.show()
+      true
+    } catch {
+      case e: Exception =>
+        logError(s"Hive test failed: ${e.getMessage}")
+        logError(s"Stack trace: ${e.getStackTrace.mkString("\n")}")
+        false
+    }
   }
 
   def testDeltaLake(spark: SparkSession): Boolean = {
     logInfo("\n=== Testing Delta Lake ===")
-    
-    val df = createTestDataFrame(spark)
-    val deltaPath = s"s3a://${sys.env("MINIO_BUCKET")}/delta/test_delta"
-    
-    logInfo(s"Creating Delta table at $deltaPath")
-    df.write
-      .format("delta")
-      .mode("overwrite")
-      .save(deltaPath)
-    
-    val readDf = spark.read
-      .format("delta")
-      .load(deltaPath)
-    
-    logInfo("Initial Delta table:")
-    readDf.show()
-    
-    val updatesDf = createTestDataFrame(spark)
-    logInfo("Updating Delta table...")
-    
-    val deltaTable = DeltaTable.forPath(spark, deltaPath)
-    deltaTable.alias("target")
-      .merge(
-        updatesDf.alias("source"),
-        "target.id = source.id"
-      )
-      .whenMatched()
-      .updateAll()
-      .whenNotMatched()
-      .insertAll()
-      .execute()
-    
-    val updatedDf = spark.read
-      .format("delta")
-      .load(deltaPath)
-    
-    logInfo("Updated Delta table:")
-    updatedDf.show()
-    
-    true
+    try {
+      val df = createTestDataFrame(spark)
+      val deltaPath = s"s3a://${sys.env("MINIO_BUCKET")}/delta/test_delta"
+      
+      logInfo(s"Creating Delta table at $deltaPath")
+      df.write
+        .format("delta")
+        .mode("overwrite")
+        .save(deltaPath)
+      
+      val readDf = spark.read
+        .format("delta")
+        .load(deltaPath)
+      
+      logInfo("Initial Delta table:")
+      readDf.show()
+      
+      val updatesDf = createTestDataFrame(spark)
+      logInfo("Updating Delta table...")
+      
+      val deltaTable = DeltaTable.forPath(spark, deltaPath)
+      deltaTable.alias("target")
+        .merge(
+          updatesDf.alias("source"),
+          "target.id = source.id"
+        )
+        .whenMatched()
+        .updateAll()
+        .whenNotMatched()
+        .insertAll()
+        .execute()
+      
+      val updatedDf = spark.read
+        .format("delta")
+        .load(deltaPath)
+      
+      logInfo("Updated Delta table:")
+      updatedDf.show()
+      true
+    } catch {
+      case e: Exception =>
+        logError(s"Delta Lake test failed: ${e.getMessage}")
+        logError(s"Stack trace: ${e.getStackTrace.mkString("\n")}")
+        false
+    }
   }
 
   private def createTestDataFrame(spark: SparkSession): DataFrame = {

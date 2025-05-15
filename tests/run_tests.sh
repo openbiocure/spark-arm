@@ -77,6 +77,9 @@ kubectl wait --for=condition=ready pod/spark-test -n spark --timeout=30s
 echo "Copying test JAR into pod..."
 kubectl cp "$JAR_PATH" spark/spark-test:/opt/spark/jars/spark-arm-tests-assembly-1.0.0.jar
 
+# Copy the log4j2.properties file
+echo "Setting up custom logging configuration..."
+kubectl cp "$SCRIPT_DIR/log4j2.properties" spark/spark-test:/opt/spark/conf/log4j2.properties
 
 # Create logs directory if it doesn't exist
 kubectl exec spark-test -n spark -- mkdir -p /opt/spark/logs
@@ -88,8 +91,8 @@ kubectl exec spark-test -n spark -- spark-submit \
     --conf spark.hadoop.fs.s3a.path.style.access=true \
     --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem \
     --conf spark.hadoop.fs.s3a.connection.ssl.enabled=false \
-    --conf spark.driver.extraJavaOptions="-Dlog4j2.configurationFile=file:/opt/spark/conf/log4j2.xml -Dlog4j2.formatMsgNoLookups=true" \
-    --conf spark.executor.extraJavaOptions="-Dlog4j2.configurationFile=file:/opt/spark/conf/log4j2.xml -Dlog4j2.formatMsgNoLookups=true" \
+    --conf spark.driver.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/conf/log4j2.properties" \
+    --conf spark.executor.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/conf/log4j2.properties" \
     --conf spark.executor.instances=1 \
     --conf spark.dynamicAllocation.enabled=false \
     --conf spark.executor.failures.max=1 \
@@ -100,14 +103,21 @@ kubectl exec spark-test -n spark -- spark-submit \
     --conf spark.executor.cores=1 \
     --conf spark.executor.memory=1g \
     --class org.openbiocure.spark.TestSparkCluster \
-    /opt/spark/jars/spark-arm-tests-assembly-1.0.0.jar
+    /opt/spark/jars/spark-arm-tests-assembly-1.0.0.jar 2>&1 | tee /tmp/spark-test-output.log
 
 # Get the exit code
 EXIT_CODE=$?
 
-# Show test logs
-echo "Test logs:"
-kubectl logs spark-test -n spark
+# Show test logs with clear separation
+echo -e "\n=== Test Output ==="
+cat /tmp/spark-test-output.log
+echo -e "\n=== End Test Output ===\n"
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "Tests failed with exit code $EXIT_CODE"
+    echo "Last 50 lines of Spark logs:"
+    kubectl logs spark-test -n spark --tail=50
+fi
 
 # Cleanup
 echo "Cleaning up..."

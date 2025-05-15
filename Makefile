@@ -90,13 +90,17 @@ test-cluster:
 
 # Run tests locally with port forwarding
 test-local: export-env
+	@echo "Building tests..."
+	@cd tests && sbt clean assembly
 	@echo "Setting up port forwarding for Spark master..."
 	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080 & echo $$! > .port-forward.pid
 	@echo "Waiting for ports to be ready..."
 	@sleep 5
 	@echo "Running local tests..."
 	@cd tests && set -a; . ../debug.env; set +a; \
-		SPARK_MASTER_URL="local[*]" sbt "runMain org.openbiocure.spark.TestSparkCluster" || (cd .. && kill $$(cat .port-forward.pid) 2>/dev/null; rm -f .port-forward.pid; exit 1)
+		SPARK_MASTER_URL="local[*]" spark-submit \
+		--class org.openbiocure.spark.TestSparkCluster \
+		target/scala-2.12/spark-arm-tests-assembly-1.0.0.jar || (cd .. && kill $$(cat .port-forward.pid) 2>/dev/null; rm -f .port-forward.pid; exit 1)
 	@echo "Cleaning up port forwarding..."
 	@kill $$(cat .port-forward.pid) 2>/dev/null || true
 	@rm -f .port-forward.pid
