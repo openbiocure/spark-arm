@@ -155,13 +155,28 @@ autoscaling:
 # Hive Metastore Configuration
 hive:
   enabled: true
+  replicaCount: 1
   metastore:
-    type: postgresql
-    host: "${POSTGRES_HOST}"
+    host: "postgresql"
     port: 5432
-    database: "hive"
-    username: "${POSTGRES_USER}"
-    password: "${POSTGRES_PASSWORD}"
+    user: "hive"
+    password: "hive"
+  server2:
+    port: 10000
+  warehouseDir: "s3a://test/warehouse"
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  extraEnv: []
+  extraVolumes: []
+  extraVolumeMounts: []
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
   spark:
     hadoop:
       # Spark SQL Hive settings

@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "spark-arm.fullname" . }}-hive
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive
+spec:
+  serviceName: {{ include "spark-arm.fullname" . }}-hive
+  replicas: {{ .Values.hive.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "spark-arm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: hive
+  template:
+    metadata:
+      labels:
+        {{- include "spark-arm.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hive
+    spec:
+      serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SPARK_NODE_TYPE
+              value: "hive"
+            - name: HIVE_METASTORE_HOST
+              value: {{ .Values.hive.metastore.host | quote }}
+            - name: HIVE_METASTORE_PORT
+              value: {{ .Values.hive.metastore.port | quote }}
+            - name: HIVE_METASTORE_USER
+              value: {{ .Values.hive.metastore.user | quote }}
+            - name: HIVE_METASTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spark-arm.fullname" . }}-hive
+                  key: metastore-password
+            - name: HIVE_SERVER2_HOST
+              value: "0.0.0.0"
+            - name: HIVE_SERVER2_PORT
+              value: {{ .Values.hive.server2.port | quote }}
+            - name: HIVE_WAREHOUSE_DIR
+              value: {{ .Values.hive.warehouseDir | quote }}
+            {{- with .Values.hive.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: thrift
+              containerPort: {{ .Values.hive.server2.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.hive.resources | nindent 12 }}
+          volumeMounts:
+            - name: hive-logs
+              mountPath: /opt/hive/logs
+            {{- with .Values.hive.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: hive-logs
+          emptyDir: {}
+        {{- with .Values.hive.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.hive.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hive.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.hive.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }} 

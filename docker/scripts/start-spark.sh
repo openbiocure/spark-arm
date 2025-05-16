@@ -13,7 +13,7 @@ trap 'handle_error ${BASH_SOURCE[0]} ${LINENO} $?' ERR
 # Determine node type from environment variable
 NODE_TYPE=${SPARK_NODE_TYPE:-"master"}
 
-log_info "Starting Spark node as: $NODE_TYPE"
+log_info "Starting node as: $NODE_TYPE"
 
 case $NODE_TYPE in
     "master")
@@ -22,8 +22,12 @@ case $NODE_TYPE in
     "worker")
         exec /opt/spark/scripts/start-worker.sh
         ;;
+    "hive")
+        log_info "Starting Hive Server2..."
+        exec ${HIVE_HOME}/bin/hiveserver2
+        ;;
     *)
-        log_error "Invalid node type: $NODE_TYPE. Must be either 'master' or 'worker'"
+        log_error "Invalid node type: $NODE_TYPE. Must be either 'master', 'worker', or 'hive'"
         exit 1
         ;;
 esac 

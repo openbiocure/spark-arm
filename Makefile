@@ -12,8 +12,7 @@ ENV_FILE ?= .env
 include $(VERSIONS_ENV_FILE)
 export
 
-
-.PHONY: build push clean deploy undeploy logs test test-cluster test-local all help lint port-forward export-env opencert-init verify-urls
+.PHONY: build push clean deploy undeploy logs lint port-forward export-env verify-urls all help
 
 # Export environment variables from both .env files
 export-env:
@@ -77,34 +76,6 @@ undeploy:
 logs:
 	kubectl logs -f -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE)
 
-# Test cluster readiness
-test:
-	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE) --timeout=300s
-
-# Run comprehensive cluster tests
-test-cluster:
-	@chmod +x tests/run_tests.sh
-	@set -a; . debug.env; set +a; \
-	export $$(grep -v '^#' .env | cut -d= -f1); \
-	./tests/run_tests.sh
-
-# Run tests locally with port forwarding
-test-local: export-env
-	@echo "Building tests..."
-	@cd tests && sbt clean assembly
-	@echo "Setting up port forwarding for Spark master..."
-	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080 & echo $$! > .port-forward.pid
-	@echo "Waiting for ports to be ready..."
-	@sleep 5
-	@echo "Running local tests..."
-	@cd tests && set -a; . ../debug.env; set +a; \
-		SPARK_MASTER_URL="local[*]" spark-submit \
-		--class org.openbiocure.spark.TestSparkCluster \
-		target/scala-2.12/spark-arm-tests-assembly-1.0.0.jar || (cd .. && kill $$(cat .port-forward.pid) 2>/dev/null; rm -f .port-forward.pid; exit 1)
-	@echo "Cleaning up port forwarding..."
-	@kill $$(cat .port-forward.pid) 2>/dev/null || true
-	@rm -f .port-forward.pid
-
 # Build, push and deploy
 all: build push deploy
 
@@ -135,12 +106,6 @@ help:
 	@echo "  make deploy           - Deploy the Spark cluster"
 	@echo "  make undeploy         - Undeploy the Spark cluster"
 	@echo "  make all              - Build, push and deploy"
-	@echo ""
-	@echo "Testing and Validation:"
-	@echo "  make lint             - Lint Helm charts and validate templates"
-	@echo "  make test             - Test cluster readiness"
-	@echo "  make test-local       - Run tests locally with port forwarding"
-	@echo "  make test-cluster     - Run comprehensive cluster tests in pod"
 	@echo ""
 	@echo "Monitoring and Debugging:"
 	@echo "  make logs             - Get logs from Spark pods"

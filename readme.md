@@ -27,11 +27,65 @@ The project is now in a stable state with:
 
 ## Prerequisites
 
+### Basic Requirements
 - Docker with ARM64 support
 - Kubernetes cluster
 - Helm 3.x
 - kubectl
 - make
+
+### Testing Prerequisites
+To run the local testing environment, you need:
+
+1. Required JARs:
+   ```bash
+   # Create directories for JARs
+   mkdir -p $HOME/spark-hive-jars $HOME/spark-extra-jars
+   
+   # Download Hive JARs (version 2.3.9)
+   curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-common/2.3.9/hive-common-2.3.9.jar -o $HOME/spark-hive-jars/
+   curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-cli/2.3.9/hive-cli-2.3.9.jar -o $HOME/spark-hive-jars/
+   curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-metastore/2.3.9/hive-metastore-2.3.9.jar -o $HOME/spark-hive-jars/
+   curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-exec/2.3.9/hive-exec-2.3.9-core.jar -o $HOME/spark-hive-jars/
+   curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-serde/2.3.9/hive-serde-2.3.9.jar -o $HOME/spark-hive-jars/
+   curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-jdbc/2.3.9/hive-jdbc-2.3.9.jar -o $HOME/spark-hive-jars/
+   
+   # Download AWS JARs
+   curl -L https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar -o $HOME/spark-extra-jars/
+   curl -L https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar -o $HOME/spark-extra-jars/
+   ```
+
+2. Required Services:
+   - PostgreSQL server (for Hive metastore)
+   - MinIO or S3-compatible storage
+   - Apache Spark (for spark-shell)
+   - Beeline client (for Hive Server2 testing)
+
+3. Network Access:
+   - PostgreSQL port (default: 5432)
+   - MinIO/S3 port (default: 9000)
+   - Hive Server2 port (default: 10000)
+
+4. Environment Variables:
+   ```bash
+   # PostgreSQL
+   export POSTGRES_HOST=your-postgres-host
+   export POSTGRES_PORT=5432
+   export POSTGRES_USER=hive
+   export POSTGRES_PASSWORD=hive
+   
+   # MinIO/S3
+   export AWS_ENDPOINT_URL=http://your-minio-host:9000
+   export AWS_ACCESS_KEY_ID=your-access-key
+   export AWS_SECRET_ACCESS_KEY=your-secret-key
+   export MINIO_BUCKET=your-bucket-name
+   ```
+
+5. Testing Tools:
+   - netcat (for port testing)
+   - curl (for downloading JARs)
+   - beeline (for Hive Server2 testing)
+   - sbt (for Scala testing)
 
 ## Quick Start
 
@@ -142,6 +196,111 @@ make test
 # View logs
 make logs
 ```
+
+## Testing Environment
+
+### Local Testing with Spark Shell and Hive
+
+To test the Spark and Hive integration locally, you can use the following spark-shell command:
+
+```bash
+spark-shell \
+  --master "local[*]" \
+  --jars \
+$HOME/spark-hive-jars/hive-common-2.3.9.jar,\
+$HOME/spark-hive-jars/hive-cli-2.3.9.jar,\
+$HOME/spark-hive-jars/hive-metastore-2.3.9.jar,\
+$HOME/spark-hive-jars/hive-exec-2.3.9-core.jar,\
+$HOME/spark-hive-jars/hive-serde-2.3.9.jar,\
+$HOME/spark-hive-jars/hive-jdbc-2.3.9.jar,\
+$HOME/spark-extra-jars/hadoop-aws-3.3.4.jar,\
+$HOME/spark-extra-jars/aws-java-sdk-bundle-1.12.262.jar \
+  --conf spark.sql.catalogImplementation=hive \
+  --conf javax.jdo.option.ConnectionURL=jdbc:postgresql://172.16.14.112:5432/hive \
+  --conf javax.jdo.option.ConnectionDriverName=org.postgresql.Driver \
+  --conf javax.jdo.option.ConnectionUserName=hive \
+  --conf javax.jdo.option.ConnectionPassword=hive \
+  --conf spark.sql.warehouse.dir=s3a://test/warehouse \
+  --conf spark.hadoop.fs.s3a.endpoint=http://172.16.14.201:9000 \
+  --conf spark.hadoop.fs.s3a.access.key=iglIu8yZXZRFipZQDEFI \
+  --conf spark.hadoop.fs.s3a.secret.key=J0lqSKgQKKJBfnNnwMHBhinFy1iMxmKGIKh4h6oP \
+  --conf spark.hadoop.fs.s3a.path.style.access=true \
+  --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+```
+
+### Testing Connectivity
+
+Once the spark-shell is running, you can test the connectivity with the following commands:
+
+1. Test Hive Metastore Connection:
+```scala
+// List all databases
+spark.sql("SHOW DATABASES").show()
+
+// Create a test database
+spark.sql("CREATE DATABASE IF NOT EXISTS test_db")
+
+// Use the test database
+spark.sql("USE test_db")
+
+// Create a test table
+spark.sql("""
+  CREATE TABLE IF NOT EXISTS test_table (
+    id INT,
+    name STRING,
+    value DOUBLE
+  )
+""")
+
+// Insert some test data
+spark.sql("""
+  INSERT INTO test_table VALUES 
+  (1, 'test1', 1.1),
+  (2, 'test2', 2.2)
+""")
+
+// Query the table
+spark.sql("SELECT * FROM test_table").show()
+```
+
+2. Test S3/MinIO Connection:
+```scala
+// List files in the warehouse directory
+spark.sql("SHOW CREATE TABLE test_table").show(false)
+
+// Check if we can write to S3
+spark.sql("""
+  CREATE TABLE IF NOT EXISTS s3_test (
+    id INT,
+    data STRING
+  ) LOCATION 's3a://test/warehouse/s3_test'
+""")
+
+// Insert data to S3
+spark.sql("""
+  INSERT INTO s3_test VALUES 
+  (1, 's3_test1'),
+  (2, 's3_test2')
+""")
+
+// Verify data in S3
+spark.sql("SELECT * FROM s3_test").show()
+```
+
+3. Test Hive Server2 Connection (from another terminal):
+```bash
+# Using beeline client
+beeline -u jdbc:hive2://localhost:10000
+
+# Or using the Hive CLI
+hive --service cli
+```
+
+If you encounter any connection issues:
+1. Verify PostgreSQL is running and accessible: `nc -zv 172.16.14.112 5432`
+2. Verify MinIO is running and accessible: `nc -zv 172.16.14.201 9000`
+3. Check the logs: `tail -f /opt/spark/logs/spark-*.log`
+4. Verify all required JARs are present in the specified directories
 
 ## Architecture
 
