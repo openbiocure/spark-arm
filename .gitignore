@@ -22,3 +22,4 @@ build/
 dist/
 *.jar
 !spark-arm/templates/*.jar
+debug.env
