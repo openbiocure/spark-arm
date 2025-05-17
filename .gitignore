@@ -1,4 +1,24 @@
 .DS_Store
 .metals
-tests/target/scala-2.12/spark-arm-tests-assembly-1.0.0.jar
 .port-forward.pid
+
+# Test files and directories
+tests/
+**/target/
+**/metastore_db/
+**/derby.log
+**/spark-warehouse/
+**/*.pid
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Build artifacts
+build/
+dist/
+*.jar
+!spark-arm/templates/*.jar
