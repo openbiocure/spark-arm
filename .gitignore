@@ -1,2 +1,4 @@
 .DS_Store
 .metals
+tests/target/scala-2.12/spark-arm-tests-assembly-1.0.0.jar
+.port-forward.pid
