@@ -157,13 +157,13 @@ hive:
   enabled: true
   replicaCount: 1
   metastore:
-    host: "postgresql"
-    port: 5432
-    user: "hive"
-    password: "hive"
+    host: "${POSTGRES_HOST}"
+    port: "${POSTGRES_PORT}"
+    user: "${POSTGRES_USER}"
+    password: "${POSTGRES_PASSWORD}"
   server2:
     port: 10000
-  warehouseDir: "s3a://test/warehouse"
+  warehouseDir: "s3a://${MINIO_BUCKET}/warehouse"
   resources:
     requests:
       cpu: 500m
@@ -171,9 +171,27 @@ hive:
     limits:
       cpu: 1000m
       memory: 2Gi
-  extraEnv: []
-  extraVolumes: []
-  extraVolumeMounts: []
+  extraEnv:
+    - name: HADOOP_HOME
+      value: "/opt/hadoop"
+    - name: HADOOP_CONF_DIR
+      value: "/opt/hadoop/etc/hadoop"
+    - name: PATH
+      value: "/opt/hadoop/bin:${PATH}"
+  extraVolumes:
+    - name: hadoop-libs
+      mountPath: /opt/hadoop/lib
+      subPath: lib
+    - name: hadoop-conf
+      mountPath: /opt/hadoop/etc/hadoop
+      subPath: etc/hadoop
+  extraVolumeMounts:
+    - name: hadoop-libs
+      mountPath: /opt/hadoop/lib
+      subPath: lib
+    - name: hadoop-conf
+      mountPath: /opt/hadoop/etc/hadoop
+      subPath: etc/hadoop
   nodeSelector: {}
   affinity: {}
   tolerations: []

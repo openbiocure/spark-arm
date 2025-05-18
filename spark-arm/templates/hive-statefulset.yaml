@@ -19,10 +19,41 @@ spec:
         app.kubernetes.io/component: hive
     spec:
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
+      initContainers:
+        - name: init-hive
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            fsGroup: 0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              apt-get update && \
+              apt-get install -y --no-install-recommends coreutils && \
+              mkdir -p /opt/spark/logs && \
+              chmod 777 /opt/spark/logs && \
+              mkdir -p /opt/hive/logs && \
+              chmod 777 /opt/hive/logs
+          volumeMounts:
+            - name: spark-logs
+              mountPath: /opt/spark/logs
+            - name: hive-logs
+              mountPath: /opt/hive/logs
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            fsGroup: 0
+          command:
+            - /bin/bash
+            - -c
+            - /opt/spark/scripts/start-hive.sh
           env:
             - name: SPARK_NODE_TYPE
               value: "hive"
@@ -53,14 +84,20 @@ spec:
           resources:
             {{- toYaml .Values.hive.resources | nindent 12 }}
           volumeMounts:
+            - name: spark-logs
+              mountPath: /opt/spark/logs
             - name: hive-logs
               mountPath: /opt/hive/logs
             {{- with .Values.hive.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
       volumes:
+        - name: spark-logs
+          persistentVolumeClaim:
+            claimName: {{ include "spark-arm.fullname" . }}-hive-spark-logs
         - name: hive-logs
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: {{ include "spark-arm.fullname" . }}-hive-logs
         {{- with .Values.hive.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -75,4 +112,34 @@ spec:
       {{- with .Values.hive.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
-      {{- end }} 
+      {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "spark-arm.fullname" . }}-hive-spark-logs
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: {{ .Values.storage.className }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "spark-arm.fullname" . }}-hive-logs
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: {{ .Values.storage.className }} 

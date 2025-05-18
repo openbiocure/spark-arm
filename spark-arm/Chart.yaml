@@ -1,6 +1,6 @@
 apiVersion: v2
 name: spark-arm
 description: A minimal Spark deployment for ARM
-version: 0.1.0
+version: 1.0.0
 appVersion: 3.5.1
 icon: https://spark.apache.org/images/spark-logo-trademark.png
