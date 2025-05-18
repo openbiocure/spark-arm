@@ -1,5 +1,5 @@
-#!/bin/sh
-set -e
+#!/bin/bash
+set -ex
 
 # Basic string trim function that works in any shell
 trim() {
@@ -8,6 +8,8 @@ trim() {
     var="${var#"${var%%[![:space:]]*}"}"
     # remove trailing whitespace
     var="${var%"${var##*[![:space:]]}"}"
+    # remove any carriage returns or newlines
+    var="${var//[$'\r\n']}"
     printf '%s' "$var"
 }
 
@@ -18,13 +20,33 @@ verify_url() {
     # Trim any whitespace from the URL using basic shell functions
     url=$(trim "$url")
     
-    # Try the verification
-    if ! curl --head --silent --fail "$url" > /dev/null; then
+    # Check if URL is empty
+    if [ -z "$url" ]; then
+        echo "ERROR: $name URL is empty"
+        exit 1
+    fi
+    
+    echo "Checking $name URL: $url"
+    # Try the verification with verbose output
+    if ! curl --head --silent --fail --show-error "$url" > /dev/null 2>&1; then
         echo "ERROR: $name URL is not accessible: $url"
+        # Try with verbose output to see what's happening
+        echo "Detailed error information:"
+        curl --head --verbose "$url" 2>&1 || true
         exit 1
     fi
     echo "✓ $name URL verified"
 }
+
+# Print environment variables for debugging
+echo "Environment variables:"
+echo "SPARK_URL_TEMPLATE: '$SPARK_URL_TEMPLATE'"
+echo "HADOOP_URL_TEMPLATE: '$HADOOP_URL_TEMPLATE'"
+echo "DELTA_URL_TEMPLATE: '$DELTA_URL_TEMPLATE'"
+echo "AWS_BUNDLE_URL_TEMPLATE: '$AWS_BUNDLE_URL_TEMPLATE'"
+echo "AWS_S3_URL_TEMPLATE: '$AWS_S3_URL_TEMPLATE'"
+echo "HIVE_URL_TEMPLATE: '$HIVE_URL_TEMPLATE'"
+echo "HIVE_VERSION: '$HIVE_VERSION'"
 
 # Verify all URLs
 echo "Verifying download URLs..."
@@ -33,5 +55,6 @@ verify_url "$HADOOP_URL_TEMPLATE" "Hadoop"
 verify_url "$DELTA_URL_TEMPLATE" "Delta Lake"
 verify_url "$AWS_BUNDLE_URL_TEMPLATE" "AWS SDK Bundle"
 verify_url "$AWS_S3_URL_TEMPLATE" "AWS SDK S3"
+verify_url "$HIVE_URL_TEMPLATE" "Hive"
 
 echo "All URLs verified successfully!" 

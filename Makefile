@@ -5,44 +5,31 @@ VERSION := $(shell cat tag)
 IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
 VALUES_FILE ?= spark-arm/values.yaml
-VERSIONS_ENV_FILE ?= docker/versions.env
-ENV_FILE ?= .env
+VERSIONS_SCRIPT ?= docker/versions.sh
 
-# Load version variables
-include $(VERSIONS_ENV_FILE)
-export
-
-.PHONY: build push clean deploy undeploy logs lint port-forward export-env verify-urls all help
-
-# Export environment variables from both .env files
+# Export environment variables from versions.sh
 export-env:
-	@if [ -f $(ENV_FILE) ]; then \
-		echo "Exporting environment variables from $(ENV_FILE)"; \
-		export $$(grep -v '^#' $(ENV_FILE) | xargs); \
+	@if [ -f $(VERSIONS_SCRIPT) ]; then \
+		echo "Exporting environment variables from $(VERSIONS_SCRIPT)"; \
+		eval $$(bash $(VERSIONS_SCRIPT)); \
 	else \
-		echo "Warning: $(ENV_FILE) not found"; \
+		echo "Error: $(VERSIONS_SCRIPT) not found"; \
+		exit 1; \
 	fi
-	@if [ -f $(VERSIONS_ENV_FILE) ]; then \
-		echo "Exporting environment variables from $(VERSIONS_ENV_FILE)"; \
-		export $$(grep -v '^#' $(VERSIONS_ENV_FILE) | xargs); \
-	else \
-		echo "Warning: $(VERSIONS_ENV_FILE) not found"; \
-	fi
+
+# Verify URLs before building
+verify-urls: export-env
+	@echo "URL verification will be performed during Docker build"
+	@echo "Skipping pre-build verification as it's handled in the Dockerfile"
 
 # Build the Docker image
 build: verify-urls
 	@echo "Building Docker image..."
 	@TAG=$$(cat tag); \
-	ARGS=""; \
-	set -a; . docker/versions.env; set +a; \
-	while IFS='=' read -r key val; do \
-		case $$key in \
-			\#*|'') continue ;; \
-			*) val=$$(eval echo $$val); ARGS="$$ARGS --build-arg $$key=$$val" ;; \
-		esac; \
-	done < docker/versions.env; \
-	echo docker build --platform linux/arm64 -t spark-arm:$$TAG $$ARGS -f docker/Dockerfile .; \
-	docker build --platform linux/arm64 -t spark-arm:$$TAG $$ARGS -f docker/Dockerfile .; \
+	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | awk '{printf "--build-arg %s ", $$0}'); \
+	BUILD_CMD="docker build --platform linux/arm64 -t spark-arm:$$TAG $$BUILD_ARGS -f docker/Dockerfile ."; \
+	echo "Debug: Build command: $$BUILD_CMD"; \
+	eval "$$BUILD_CMD"; \
 	docker tag spark-arm:$$TAG $(IMAGE_NAME):$(IMAGE_TAG); \
 	docker tag spark-arm:$$TAG $(IMAGE_NAME):latest
 
@@ -86,12 +73,6 @@ port-forward: export-env
 	@echo "- UI: http://localhost:8080"
 	@kubectl port-forward -n spark svc/spark-arm-master 7077:7077 8080:8080
 
-# Verify URLs
-verify-urls: export-env
-	@echo "Verifying download URLs..."
-	@chmod +x docker/scripts/verify-urls.sh
-	@./docker/scripts/verify-urls.sh
-
 # Show help
 help:
 	@echo "Available commands:"
@@ -112,7 +93,7 @@ help:
 	@echo "  make port-forward     - Forward Spark master ports (7077, 8080)"
 	@echo ""
 	@echo "Environment:"
-	@echo "  make export-env       - Export environment variables from .env file"
+	@echo "  make export-env       - Export environment variables from versions.sh file"
 	@echo ""
 	@echo "For more information, see the README.md file"
 

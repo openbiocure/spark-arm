@@ -7,116 +7,75 @@ source /opt/spark/scripts/logging.sh
 # Initialize logging
 init_logging
 
-# Function to verify URL exists
-verify_url() {
+# Function to download a single JAR
+download_jar() {
     local url=$1
-    log_info "Verifying URL exists: $url"
-    if curl -s --head --fail "$url" > /dev/null; then
-        log_info "URL exists and is accessible"
+    local output_dir=$2
+    local filename=$(basename "$url")
+    local output_path="${output_dir}/${filename}"
+    
+    log_info "Downloading ${filename}..."
+    if curl -L -f -o "${output_path}" "${url}"; then
+        log_info "✓ Downloaded ${filename}"
         return 0
     else
-        log_error "URL does not exist or is not accessible: $url"
+        log_error "Failed to download ${filename}"
         return 1
     fi
 }
 
-# Function to download and verify JARs
-download_and_verify_jar() {
-    local url=$1
-    local output=$2
-    local expected_size=${3:-0}
+# Function to download JARs in parallel
+download_jars_parallel() {
+    local output_dir=$1
+    shift
+    local urls=("$@")
+    local pids=()
+    local failed=0
     
-    # Verify URL exists before attempting download
-    if ! verify_url "$url"; then
-        log_error "JAR not available at URL: $url"
-        return 1
-    fi
+    # Create output directory if it doesn't exist
+    mkdir -p "${output_dir}"
     
-    log_info "Downloading $url to $output"
-    if curl -fSL "$url" -o "$output"; then
-        if [ -f "$output" ]; then
-            local actual_size=$(stat -f%z "$output" 2>/dev/null || stat -c%s "$output" 2>/dev/null)
-            if [ "$actual_size" -gt 0 ]; then
-                log_info "Successfully downloaded $(basename $output) ($actual_size bytes)"
-                return 0
-            fi
+    # Start downloads in parallel
+    for url in "${urls[@]}"; do
+        download_jar "${url}" "${output_dir}" &
+        pids+=($!)
+    done
+    
+    # Wait for all downloads to complete
+    for pid in "${pids[@]}"; do
+        if ! wait "${pid}"; then
+            failed=1
         fi
-    fi
-    log_error "Failed to download or verify $url"
-    return 1
+    done
+    
+    return ${failed}
 }
 
-# Download Delta Lake JARs
-download_delta_jars() {
-    local spark_home=$1
-    
-    log_info "=== Downloading Delta Lake JARs ==="
-    
-    # Verify URL exists before downloading
-    if ! verify_url "$DELTA_URL_TEMPLATE"; then
-        log_error "Delta Lake JAR not available"
-        return 1
-    fi
-    
-    # Download Delta Lake JAR
-    local jar_name=$(basename "$DELTA_URL_TEMPLATE")
-    download_and_verify_jar \
-        "$DELTA_URL_TEMPLATE" \
-        "${spark_home}/jars/${jar_name}" || {
-            log_error "Failed to download Delta Lake JAR"
-            exit 1
-        }
-}
-
-# Download AWS SDK JARs
-download_aws_jars() {
-    local spark_home=$1
-    
-    log_info "=== Downloading AWS SDK JARs ==="
-    
-    # Verify URL exists before downloading
-    if ! verify_url "$AWS_BUNDLE_URL_TEMPLATE"; then
-        log_error "AWS SDK Bundle JAR not available"
-        return 1
-    fi
-    
-    # Download AWS SDK Bundle JAR
-    local bundle_name=$(basename "$AWS_BUNDLE_URL_TEMPLATE")
-    
-    download_and_verify_jar \
-        "$AWS_BUNDLE_URL_TEMPLATE" \
-        "${spark_home}/jars/${bundle_name}" || exit 1
-}
-
-# Verify JARs are present
-verify_jars() {
-    local spark_home=$1
-    
-    log_info "=== Verifying JARs ==="
-    
-    log_info "Delta Lake JARs:"
-    ls -l ${spark_home}/jars/delta-*.jar || log_error "No Delta Lake JARs found"
-    
-    log_info "AWS SDK JARs:"
-    ls -l ${spark_home}/jars/aws-java-sdk-bundle-*.jar || log_error "No AWS SDK Bundle JAR found"
-}
-
-# Main function to download all JARs
+# Main function to download all required JARs
 download_all_jars() {
-    local spark_home=${SPARK_HOME:-/opt/spark}
+    log_info "=== Downloading Required JARs ==="
     
     # Create jars directory if it doesn't exist
-    mkdir -p "${spark_home}/jars"
+    mkdir -p "${SPARK_HOME}/jars"
     
-    # Download all JARs
-    download_delta_jars "$spark_home"
-    download_aws_jars "$spark_home"
+    # List of JARs to download
+    local urls=(
+        "${DELTA_URL_TEMPLATE}"
+        "${AWS_BUNDLE_URL_TEMPLATE}"
+        "${AWS_S3_URL_TEMPLATE}"
+    )
     
-    # Verify all JARs
-    verify_jars "$spark_home"
+    # Download JARs in parallel
+    if ! download_jars_parallel "${SPARK_HOME}/jars" "${urls[@]}"; then
+        log_error "Failed to download one or more JARs"
+        return 1
+    fi
+    
+    log_info "All JARs downloaded successfully"
+    return 0
 }
 
-# If script is run directly (not sourced)
+# Main execution
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     download_all_jars
 fi 
