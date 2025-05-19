@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <!-- Hive Metastore Configuration -->
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbc:postgresql://$HIVE_METASTORE_DB_HOST:$HIVE_METASTORE_DB_PORT/$HIVE_METASTORE_DB_NAME</value>
+        <description>PostgreSQL connection URL</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>org.postgresql.Driver</value>
+        <description>PostgreSQL JDBC driver</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>$HIVE_METASTORE_DB_USER</value>
+        <description>PostgreSQL username</description>
+    </property>
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>$HIVE_METASTORE_DB_PASSWORD</value>
+        <description>PostgreSQL password</description>
+    </property>
+
+    <!-- DataNucleus Configuration -->
+    <property>
+        <name>datanucleus.schema.autoCreateTables</name>
+        <value>true</value>
+        <description>Enable automatic table creation for DataNucleus</description>
+    </property>
+    <property>
+        <name>datanucleus.schema.autoCreateColumns</name>
+        <value>true</value>
+        <description>Enable automatic column creation for DataNucleus</description>
+    </property>
+    <property>
+        <name>datanucleus.schema.validateTables</name>
+        <value>false</value>
+        <description>Disable table validation for DataNucleus</description>
+    </property>
+    <property>
+        <name>datanucleus.schema.autoCreateConstraints</name>
+        <value>true</value>
+        <description>Enable automatic constraint creation for DataNucleus</description>
+    </property>
+    <property>
+        <name>datanucleus.autoStartMechanism</name>
+        <value>SchemaTable</value>
+        <description>Use SchemaTable for auto-start mechanism</description>
+    </property>
+    <property>
+        <name>datanucleus.rdbms.datastoreAdapterClassName</name>
+        <value>org.datanucleus.store.rdbms.adapter.PostgreSQLAdapter</value>
+        <description>PostgreSQL adapter for DataNucleus</description>
+    </property>
+    <property>
+        <name>datanucleus.connectionPoolingType</name>
+        <value>None</value>
+        <description>Disable connection pooling</description>
+    </property>
+    <property>
+        <name>datanucleus.fixedDatastore</name>
+        <value>false</value>
+        <description>Allow schema updates</description>
+    </property>
+
+    <!-- Hive Server2 Configuration -->
+    <property>
+        <name>hive.server2.thrift.port</name>
+        <value>$HIVE_SERVER2_PORT</value>
+        <description>Port number of HiveServer2 Thrift interface</description>
+    </property>
+    <property>
+        <name>hive.server2.thrift.bind.host</name>
+        <value>$HIVE_SERVER2_BIND_HOST</value>
+        <description>Bind host on which to run the HiveServer2 Thrift interface</description>
+    </property>
+
+    <!-- Hive Metastore Configuration -->
+    <property>
+        <name>hive.metastore.uris</name>
+        <value>thrift://$HIVE_METASTORE_HOST:$HIVE_METASTORE_PORT</value>
+        <description>Thrift URI for the remote metastore</description>
+    </property>
+    <property>
+        <name>hive.metastore.schema.verification</name>
+        <value>false</value>
+        <description>Disable schema verification</description>
+    </property>
+
+    <!-- Hive Warehouse Configuration -->
+    <property>
+        <name>hive.metastore.warehouse.dir</name>
+        <value>$HIVE_WAREHOUSE_DIR</value>
+        <description>Location of default database for the warehouse</description>
+    </property>
+    <property>
+        <name>hive.exec.scratchdir</name>
+        <value>$HIVE_SCRATCH_DIR</value>
+        <description>Scratch space for Hive jobs</description>
+    </property>
+</configuration> 

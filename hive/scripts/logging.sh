@@ -12,24 +12,41 @@ init_logging() {
     else
         # Runtime mode - use Hive logs directory
         export LOG_FILE="${HIVE_HOME}/logs/hive.log"
-        # Ensure logs directory exists and is writable
-        mkdir -p "${HIVE_HOME}/logs"
-        touch "$LOG_FILE"
-        chmod 666 "$LOG_FILE"
     fi
+
+    # Remove existing log file if it exists as we don't have write permission
+    if [ -f "$LOG_FILE" ] && [ ! -w "$LOG_FILE" ]; then
+        rm -f "$LOG_FILE"
+    fi
+
+    # Create log file with proper permissions
+    touch "$LOG_FILE" 2>/dev/null || true
+    chmod 666 "$LOG_FILE" 2>/dev/null || true
 }
 
 # Log levels
 log_info() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" | tee -a "$LOG_FILE"
+    if [ -w "$LOG_FILE" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" | tee -a "$LOG_FILE"
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1"
+    fi
 }
 
 log_warn() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" | tee -a "$LOG_FILE"
+    if [ -w "$LOG_FILE" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" | tee -a "$LOG_FILE"
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1"
+    fi
 }
 
 log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" | tee -a "$LOG_FILE"
+    if [ -w "$LOG_FILE" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" | tee -a "$LOG_FILE"
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1"
+    fi
 }
 
 # Error handler

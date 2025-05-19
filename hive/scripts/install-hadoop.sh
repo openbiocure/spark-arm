@@ -98,6 +98,11 @@ download_and_install_hadoop() {
             log_info "Cleaning up..."
             rm -rf /tmp/hadoop.tar.gz "/opt/hadoop-${hadoop_version}"
             
+            # Clean up conflicting SLF4J binding
+            log_info "Cleaning up conflicting SLF4J bindings..."
+            find "${hadoop_home}/share/hadoop/common/lib" -name "slf4j-reload4j-*.jar" -delete
+            log_info "Removed slf4j-reload4j binding to prevent logging conflicts"
+            
             log_info "Hadoop installation completed successfully"
             return 0
         else
