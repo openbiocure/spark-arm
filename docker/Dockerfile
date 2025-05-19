@@ -11,8 +11,6 @@ ARG HADOOP_URL_TEMPLATE
 ARG DELTA_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
-ARG HIVE_VERSION
-ARG HIVE_URL_TEMPLATE
 
 # Stage 1: URL verification (lightweight)
 FROM eclipse-temurin:17-jdk-jammy AS url-verifier
@@ -35,8 +33,6 @@ ARG HADOOP_URL_TEMPLATE
 ARG DELTA_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
-ARG HIVE_VERSION
-ARG HIVE_URL_TEMPLATE
 
 # Export all variables to environment
 ENV SPARK_VERSION="${SPARK_VERSION}" \
@@ -48,14 +44,10 @@ ENV SPARK_VERSION="${SPARK_VERSION}" \
     HADOOP_URL_TEMPLATE="${HADOOP_URL_TEMPLATE}" \
     DELTA_URL_TEMPLATE="${DELTA_URL_TEMPLATE}" \
     AWS_BUNDLE_URL_TEMPLATE="${AWS_BUNDLE_URL_TEMPLATE}" \
-    AWS_S3_URL_TEMPLATE="${AWS_S3_URL_TEMPLATE}" \
-    HIVE_VERSION="${HIVE_VERSION}" \
-    HIVE_URL_TEMPLATE="${HIVE_URL_TEMPLATE}"
+    AWS_S3_URL_TEMPLATE="${AWS_S3_URL_TEMPLATE}"
 
 # Debug output for environment variables
-RUN echo "Debug: Environment variables in url-verifier stage:" && \
-    echo "HIVE_URL_TEMPLATE='${HIVE_URL_TEMPLATE}'" && \
-    echo "HIVE_VERSION='${HIVE_VERSION}'"
+RUN echo "Debug: Environment variables in url-verifier stage:"
 
 # Install URL verification dependencies and run verification
 RUN --mount=type=cache,target=/var/cache/apt \
@@ -85,12 +77,10 @@ FROM eclipse-temurin:17-jdk-jammy
 
 # Common environment variables
 ENV SPARK_HOME=/opt/spark \
-    PATH=$PATH:/opt/spark/bin \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/spark/bin \
     HADOOP_HOME=/opt/hadoop \
     LD_LIBRARY_PATH=/opt/hadoop/lib/native \
-    SPARK_CLASSPATH=/opt/spark/jars/* \
-    HIVE_HOME=/opt/hive \
-    PATH=$PATH:/opt/hive/bin
+    SPARK_CLASSPATH=/opt/spark/jars/*
 
 # Copy verification marker and native libraries
 COPY --from=url-verifier /tmp/urls-verified /tmp/
@@ -111,8 +101,6 @@ ARG HADOOP_URL_TEMPLATE
 ARG DELTA_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
-ARG HIVE_VERSION
-ARG HIVE_URL_TEMPLATE
 
 ENV SPARK_VERSION=${SPARK_VERSION} \
     HADOOP_VERSION=${HADOOP_VERSION} \
@@ -123,11 +111,9 @@ ENV SPARK_VERSION=${SPARK_VERSION} \
     HADOOP_URL_TEMPLATE=${HADOOP_URL_TEMPLATE} \
     DELTA_URL_TEMPLATE=${DELTA_URL_TEMPLATE} \
     AWS_BUNDLE_URL_TEMPLATE=${AWS_BUNDLE_URL_TEMPLATE} \
-    AWS_S3_URL_TEMPLATE=${AWS_S3_URL_TEMPLATE} \
-    HIVE_VERSION=${HIVE_VERSION} \
-    HIVE_URL_TEMPLATE=${HIVE_URL_TEMPLATE}
+    AWS_S3_URL_TEMPLATE=${AWS_S3_URL_TEMPLATE}
 
-# Create non-root user and install system dependencies
+# Install system dependencies and create user
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt \
     apt-get update && \
@@ -136,12 +122,26 @@ RUN --mount=type=cache,target=/var/cache/apt \
         netcat-openbsd \
         procps \
         tini \
-        postgresql-client && \
-    rm -rf /var/lib/apt/lists/* && \
+        coreutils \
+        bash \
+        && rm -rf /var/lib/apt/lists/* && \
+    # Create user and directories
     groupadd -r spark && \
     useradd -r -g spark spark && \
-    mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs ${HIVE_HOME} && \
-    chown -R spark:spark ${SPARK_HOME} ${HADOOP_HOME} ${HIVE_HOME}
+    # Create directories with proper permissions
+    mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs && \
+    # Set ownership of directories
+    chown -R spark:spark ${SPARK_HOME} ${HADOOP_HOME} && \
+    # Set permissions for log directories
+    chmod 777 ${SPARK_HOME}/logs && \
+    # Ensure spark user has access to essential commands
+    chmod -R 755 /usr/bin/bash /usr/bin/date /usr/bin/mkdir && \
+    # Verify essential commands are available and accessible
+    su - spark -c "which bash" && \
+    su - spark -c "which date" && \
+    su - spark -c "which mkdir" && \
+    # Verify log directories are accessible
+    su - spark -c "test -w ${SPARK_HOME}/logs"
 
 # Download and install Spark
 RUN --mount=type=cache,target=/tmp/downloads \
@@ -151,17 +151,11 @@ RUN --mount=type=cache,target=/tmp/downloads \
 RUN --mount=type=cache,target=/tmp/downloads \
     ${SPARK_HOME}/scripts/download-jars.sh
 
-# Create spark-defaults.conf and copy Hive configuration
-COPY docker/conf/hive-site.xml ${SPARK_HOME}/conf/
+# Create spark-defaults.conf
 RUN ${SPARK_HOME}/scripts/create-spark-defaults.sh
 
-# Install and configure Hive
-RUN --mount=type=cache,target=/tmp/downloads \
-    ${SPARK_HOME}/scripts/install-hive.sh ${HIVE_VERSION} ${HIVE_HOME}
-
-# Set working directory and switch to non-root user
+# Set working directory
 WORKDIR ${SPARK_HOME}
-USER spark
 
 # Use tini as init process
 ENTRYPOINT ["/usr/bin/tini", "--"]

@@ -45,8 +45,6 @@ echo "HADOOP_URL_TEMPLATE: '$HADOOP_URL_TEMPLATE'"
 echo "DELTA_URL_TEMPLATE: '$DELTA_URL_TEMPLATE'"
 echo "AWS_BUNDLE_URL_TEMPLATE: '$AWS_BUNDLE_URL_TEMPLATE'"
 echo "AWS_S3_URL_TEMPLATE: '$AWS_S3_URL_TEMPLATE'"
-echo "HIVE_URL_TEMPLATE: '$HIVE_URL_TEMPLATE'"
-echo "HIVE_VERSION: '$HIVE_VERSION'"
 
 # Verify all URLs
 echo "Verifying download URLs..."
@@ -55,6 +53,5 @@ verify_url "$HADOOP_URL_TEMPLATE" "Hadoop"
 verify_url "$DELTA_URL_TEMPLATE" "Delta Lake"
 verify_url "$AWS_BUNDLE_URL_TEMPLATE" "AWS SDK Bundle"
 verify_url "$AWS_S3_URL_TEMPLATE" "AWS SDK S3"
-verify_url "$HIVE_URL_TEMPLATE" "Hive"
 
 echo "All URLs verified successfully!" 

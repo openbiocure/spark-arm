@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <property>
+        <name>fs.defaultFS</name>
+        <value>file:///</value>
+        <description>Default filesystem URI</description>
+    </property>
+    <property>
+        <name>hadoop.http.staticuser.user</name>
+        <value>hive</value>
+        <description>Default static web user</description>
+    </property>
+</configuration> 

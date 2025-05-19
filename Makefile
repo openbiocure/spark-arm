@@ -1,11 +1,12 @@
 # Variables
 REGISTRY ?= ghcr.io
 IMAGE_NAME ?= $(REGISTRY)/openbiocure/spark-arm
+HIVE_IMAGE_NAME ?= $(REGISTRY)/openbiocure/hive-arm
 VERSION := $(shell cat tag)
 IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
 VALUES_FILE ?= spark-arm/values.yaml
-VERSIONS_SCRIPT ?= docker/versions.sh
+VERSIONS_SCRIPT ?= versions.sh
 
 # Export environment variables from versions.sh
 export-env:
@@ -26,7 +27,7 @@ verify-urls: export-env
 build: verify-urls
 	@echo "Building Docker image..."
 	@TAG=$$(cat tag); \
-	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | awk '{printf "--build-arg %s ", $$0}'); \
+	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | grep -v '^#' | grep -v '^$$' | tr '\n' ' ' | sed 's/^ *//;s/ *$$//' | awk '{for(i=1;i<=NF;i++) printf "--build-arg %s ", $$i}'); \
 	BUILD_CMD="docker build --platform linux/arm64 -t spark-arm:$$TAG $$BUILD_ARGS -f docker/Dockerfile ."; \
 	echo "Debug: Build command: $$BUILD_CMD"; \
 	eval "$$BUILD_CMD"; \
@@ -63,6 +64,22 @@ undeploy:
 logs:
 	kubectl logs -f -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE)
 
+# Build the Hive Docker image
+build-hive: verify-urls
+	@echo "Building Hive Docker image..."
+	@TAG=$$(cat tag); \
+	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | grep -v '^#' | grep -v '^$$' | tr '\n' ' ' | sed 's/^ *//;s/ *$$//' | awk '{for(i=1;i<=NF;i++) printf "--build-arg %s ", $$i}'); \
+	BUILD_CMD="docker build --platform linux/arm64 -t hive-arm:$$TAG $$BUILD_ARGS -f hive/Dockerfile hive"; \
+	echo "Debug: Build command: $$BUILD_CMD"; \
+	eval "$$BUILD_CMD"; \
+	docker tag hive-arm:$$TAG $(HIVE_IMAGE_NAME):$(IMAGE_TAG); \
+	docker tag hive-arm:$$TAG $(HIVE_IMAGE_NAME):latest
+
+# Push the Hive Docker image to registry
+push-hive:
+	docker push $(HIVE_IMAGE_NAME):$(IMAGE_TAG)
+	docker push $(HIVE_IMAGE_NAME):latest
+
 # Build, push and deploy
 all: build push deploy
 
@@ -80,7 +97,9 @@ help:
 	@echo "Build and Verification:"
 	@echo "  make verify-urls      - Verify all download URLs before building"
 	@echo "  make build            - Build the Docker image (includes URL verification)"
+	@echo "  make build-hive       - Build the Hive Docker image (includes URL verification)"
 	@echo "  make push             - Push the Docker image to registry"
+	@echo "  make push-hive        - Push the Hive Docker image to registry"
 	@echo "  make clean            - Clean up build artifacts"
 	@echo ""
 	@echo "Deployment and Management:"
