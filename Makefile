@@ -54,7 +54,8 @@ deploy: export-env lint
 	helm upgrade --install spark-arm spark-arm \
 		--namespace $(NAMESPACE) \
 		--values $(VALUES_FILE) \
-		--set image.tag=$(VERSION)
+		--set image.tag=$(VERSION) \
+		--set hive.image.tag=$(VERSION)
 
 # Undeploy the Spark cluster
 undeploy:
@@ -77,8 +78,10 @@ build-hive: verify-urls
 
 # Push the Hive Docker image to registry
 push-hive:
+	docker tag $(HIVE_IMAGE_NAME):$(IMAGE_TAG) $(HIVE_IMAGE_NAME):stable
 	docker push $(HIVE_IMAGE_NAME):$(IMAGE_TAG)
 	docker push $(HIVE_IMAGE_NAME):latest
+	docker push $(HIVE_IMAGE_NAME):stable
 
 # Build, push and deploy
 all: build push deploy

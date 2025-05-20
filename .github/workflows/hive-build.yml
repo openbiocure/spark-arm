@@ -1,0 +1,50 @@
+name: Build and Push Hive Image
+
+on:
+  push:
+    branches:
+      - 'stable'
+      - 'main'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - 'stable'
+      - 'main'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.ORG_PACKAGE_TOKEN }}
+
+      - name: Build and Push
+        run: |
+          make build-hive
+          TAG=$(cat tag)
+          docker tag hive-arm:$TAG ghcr.io/openbiocure/hive-arm:$TAG
+          docker tag hive-arm:$TAG ghcr.io/openbiocure/hive-arm:latest
+          docker push ghcr.io/openbiocure/hive-arm:$TAG
+          docker push ghcr.io/openbiocure/hive-arm:latest 

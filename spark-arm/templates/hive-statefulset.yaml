@@ -19,88 +19,125 @@ spec:
         app.kubernetes.io/component: hive
     spec:
       serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
-      initContainers:
-        - name: init-hive
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-            fsGroup: 0
-          command:
-            - /bin/bash
-            - -c
-            - |
-              apt-get update && \
-              apt-get install -y --no-install-recommends coreutils && \
-              mkdir -p /opt/spark/logs && \
-              chmod 777 /opt/spark/logs && \
-              mkdir -p /opt/hive/logs && \
-              chmod 777 /opt/hive/logs
-          volumeMounts:
-            - name: spark-logs
-              mountPath: /opt/spark/logs
-            - name: hive-logs
-              mountPath: /opt/hive/logs
+      securityContext:
+        fsGroup: 1000
       containers:
-        - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+        - name: hive
+          image: "{{ .Values.hive.image.repository }}:{{ .Values.hive.image.tag }}"
+          imagePullPolicy: {{ .Values.hive.image.pullPolicy }}
           securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-            fsGroup: 0
+            runAsUser: 1000
+            runAsGroup: 1000
           command:
             - /bin/bash
             - -c
-            - /opt/spark/scripts/start-hive.sh
+            - start-hive.sh
           env:
-            - name: SPARK_NODE_TYPE
-              value: "hive"
-            - name: HIVE_METASTORE_HOST
-              value: {{ .Values.hive.metastore.host | quote }}
-            - name: HIVE_METASTORE_PORT
-              value: {{ .Values.hive.metastore.port | quote }}
-            - name: HIVE_METASTORE_USER
-              value: {{ .Values.hive.metastore.user | quote }}
-            - name: HIVE_METASTORE_PASSWORD
+            # PostgreSQL Connection
+            - name: POSTGRES_HOST
+              value: "{{ .Values.postgres.host }}"
+            - name: POSTGRES_PORT
+              value: "{{ .Values.postgres.port }}"
+            - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "spark-arm.fullname" . }}-hive
-                  key: metastore-password
+                  name: spark-arm-postgres
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: spark-arm-postgres
+                  key: password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: spark-arm-postgres
+                  key: database
+            # Hive Metastore
+            - name: HIVE_METASTORE_URI
+              value: "thrift://localhost:{{ .Values.hive.service.metastorePort }}"
+            - name: HIVE_METASTORE_HOST
+              value: "localhost"
+            - name: HIVE_METASTORE_PORT
+              value: {{ .Values.hive.service.metastorePort | quote }}
+            # HiveServer2
             - name: HIVE_SERVER2_HOST
               value: "0.0.0.0"
             - name: HIVE_SERVER2_PORT
               value: {{ .Values.hive.server2.port | quote }}
+            - name: HIVE_SERVER2_AUTHENTICATION
+              value: {{ .Values.hive.server2.authentication | quote }}
+            - name: HIVE_SERVER2_SASL_ENABLED
+              value: {{ .Values.hive.server2.sasl.enabled | quote }}
+            - name: HIVE_SERVER2_SASL_QOP
+              value: {{ .Values.hive.server2.sasl.qop | quote }}
+            # Hive Directories
             - name: HIVE_WAREHOUSE_DIR
               value: {{ .Values.hive.warehouseDir | quote }}
+            - name: HIVE_SCRATCH_DIR
+              value: {{ .Values.hive.scratchDir | quote }}
+            # Hive Logging
+            - name: HIVE_LOG_LEVEL
+              value: {{ .Values.hive.logging.level | quote }}
+            # MinIO/S3 Configuration
+            - name: AWS_ENDPOINT_URL
+              value: {{ .Values.minio.endpoint | quote }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spark-arm.fullname" . }}-minio
+                  key: s3a-access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spark-arm.fullname" . }}-minio
+                  key: s3a-secret-key
+            - name: MINIO_BUCKET
+              value: {{ .Values.minio.bucket | quote }}
             {{- with .Values.hive.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           ports:
-            - name: thrift
-              containerPort: {{ .Values.hive.server2.port }}
+            - name: metastore
+              containerPort: {{ .Values.hive.service.metastorePort }}
+              protocol: TCP
+            - name: server2
+              containerPort: {{ .Values.hive.service.server2Port }}
               protocol: TCP
           resources:
             {{- toYaml .Values.hive.resources | nindent 12 }}
           volumeMounts:
-            - name: spark-logs
-              mountPath: /opt/spark/logs
             - name: hive-logs
               mountPath: /opt/hive/logs
-            {{- with .Values.hive.extraVolumeMounts }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
+            - name: hive-warehouse
+              mountPath: /opt/hive/warehouse
+            - name: hive-scratch
+              mountPath: /opt/hive/scratch
+            - name: hadoop-libs
+              mountPath: /opt/hadoop/lib
+              subPath: lib
+            - name: hadoop-conf
+              mountPath: /opt/hadoop/etc/hadoop
+              subPath: etc/hadoop
+            - name: hive-conf
+              mountPath: /opt/hive/conf
+              subPath: conf
       volumes:
-        - name: spark-logs
-          persistentVolumeClaim:
-            claimName: {{ include "spark-arm.fullname" . }}-hive-spark-logs
         - name: hive-logs
           persistentVolumeClaim:
             claimName: {{ include "spark-arm.fullname" . }}-hive-logs
-        {{- with .Values.hive.extraVolumes }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        - name: hive-warehouse
+          persistentVolumeClaim:
+            claimName: {{ include "spark-arm.fullname" . }}-hive-warehouse
+        - name: hive-scratch
+          persistentVolumeClaim:
+            claimName: {{ include "spark-arm.fullname" . }}-hive-scratch
+        - name: hadoop-libs
+          emptyDir: {}
+        - name: hadoop-conf
+          emptyDir: {}
+        - name: hive-conf
+          emptyDir: {}
       {{- with .Values.hive.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -117,29 +154,44 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "spark-arm.fullname" . }}-hive-spark-logs
-  labels:
-    {{- include "spark-arm.labels" . | nindent 4 }}
-    app.kubernetes.io/component: hive
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-  storageClassName: {{ .Values.storage.className }}
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
   name: {{ include "spark-arm.fullname" . }}-hive-logs
   labels:
     {{- include "spark-arm.labels" . | nindent 4 }}
     app.kubernetes.io/component: hive
 spec:
   accessModes:
-    - ReadWriteOnce
+    - {{ .Values.hive.persistence.accessMode }}
   resources:
     requests:
-      storage: 1Gi
-  storageClassName: {{ .Values.storage.className }} 
+      storage: {{ .Values.hive.persistence.size }}
+  storageClassName: {{ .Values.hive.persistence.storageClass }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "spark-arm.fullname" . }}-hive-warehouse
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive
+spec:
+  accessModes:
+    - {{ .Values.hive.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.hive.persistence.size }}
+  storageClassName: {{ .Values.hive.persistence.storageClass }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "spark-arm.fullname" . }}-hive-scratch
+  labels:
+    {{- include "spark-arm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hive
+spec:
+  accessModes:
+    - {{ .Values.hive.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.hive.persistence.size }}
+  storageClassName: {{ .Values.hive.persistence.storageClass }} 

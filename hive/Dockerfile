@@ -31,6 +31,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpostgresql-jdbc-java \
     gettext \
     lsof \
+    coreutils \
+    grep \
     && rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories and set permissions

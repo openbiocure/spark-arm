@@ -77,15 +77,24 @@ spec:
             {{- end }}
             {{- if .Values.hive.enabled }}
             - name: POSTGRES_HOST
-              value: {{ .Values.hive.metastore.host | quote }}
+              value: "{{ .Values.postgres.host }}"
             - name: POSTGRES_PORT
-              value: {{ .Values.hive.metastore.port | quote }}
+              value: "{{ .Values.postgres.port }}"
             - name: POSTGRES_DB
-              value: {{ .Values.hive.metastore.database | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: spark-arm-postgres
+                  key: database
             - name: POSTGRES_USER
-              value: {{ .Values.hive.metastore.username | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: spark-arm-postgres
+                  key: username
             - name: POSTGRES_PASSWORD
-              value: {{ .Values.hive.metastore.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: spark-arm-postgres
+                  key: password
             - name: HIVE_METASTORE_HOST
               value: {{ .Values.hive.metastore.host | quote }}
             {{- end }}

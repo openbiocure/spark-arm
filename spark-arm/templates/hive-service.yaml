@@ -6,12 +6,16 @@ metadata:
     {{- include "spark-arm.labels" . | nindent 4 }}
     app.kubernetes.io/component: hive
 spec:
-  type: ClusterIP
+  type: {{ .Values.hive.service.type }}
   ports:
-    - port: {{ .Values.hive.server2.port }}
-      targetPort: thrift
+    - port: {{ .Values.hive.service.metastorePort }}
+      targetPort: metastore
       protocol: TCP
-      name: thrift
+      name: metastore
+    - port: {{ .Values.hive.service.server2Port }}
+      targetPort: server2
+      protocol: TCP
+      name: server2
   selector:
     {{- include "spark-arm.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: hive 

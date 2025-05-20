@@ -16,16 +16,28 @@ minio:
   # External MinIO service configuration
   endpoint: "${AWS_ENDPOINT_URL}"
   bucket: "${MINIO_BUCKET:-spark-data}" # Default to spark-data if not set
-  # MinIO credentials (should be provided via secret in production)
+  # MinIO credentials (provided via secret)
   credentials:
-    accessKey: "${AWS_ACCESS_KEY_ID}" # Leave empty, should be provided via secret
-    secretKey: "${AWS_SECRET_ACCESS_KEY}" # Leave empty, should be provided via secret
+    accessKey:
+      secretKeyRef:
+        name: spark-arm-minio
+        key: access-key
+    secretKey:
+      secretKeyRef:
+        name: spark-arm-minio
+        key: secret-key
   # Spark integration settings
   spark:
     hadoop:
       fs.s3a.endpoint: "${AWS_ENDPOINT_URL}"
-      fs.s3a.access.key: "${AWS_ACCESS_KEY_ID}"
-      fs.s3a.secret.key: "${AWS_SECRET_ACCESS_KEY}"
+      fs.s3a.access.key:
+        secretKeyRef:
+          name: spark-arm-minio
+          key: s3a-access-key
+      fs.s3a.secret.key:
+        secretKeyRef:
+          name: spark-arm-minio
+          key: s3a-secret-key
       fs.s3a.path.style.access: "true"
       fs.s3a.connection.ssl.enabled: "false"
       fs.s3a.impl: "org.apache.hadoop.fs.s3a.S3AFileSystem"
@@ -78,7 +90,7 @@ worker:
 image:
   repository: ghcr.io/openbiocure/spark-arm
   # Default tag, will be overridden by version from tag file during deployment
-  tag: stable
+  tag: ${VERSION}
   pullPolicy: IfNotPresent
 
 # Service configuration
@@ -156,14 +168,26 @@ autoscaling:
 hive:
   enabled: true
   replicaCount: 1
+  image:
+    repository: ghcr.io/openbiocure/hive-arm
+    tag: ${VERSION}
+    pullPolicy: IfNotPresent
   metastore:
+    enabled: true
     host: "${POSTGRES_HOST}"
     port: "${POSTGRES_PORT}"
     user: "${POSTGRES_USER}"
     password: "${POSTGRES_PASSWORD}"
+    dbName: "${POSTGRES_DB:-hive}"
   server2:
+    enabled: true
     port: 10000
+    authentication: NONE
+    sasl:
+      enabled: false
+      qop: auth
   warehouseDir: "s3a://${MINIO_BUCKET}/warehouse"
+  scratchDir: "s3a://${MINIO_BUCKET}/scratch"
   resources:
     requests:
       cpu: 500m
@@ -176,8 +200,12 @@ hive:
       value: "/opt/hadoop"
     - name: HADOOP_CONF_DIR
       value: "/opt/hadoop/etc/hadoop"
+    - name: HIVE_HOME
+      value: "/opt/hive"
+    - name: HIVE_CONF_DIR
+      value: "/opt/hive/conf"
     - name: PATH
-      value: "/opt/hadoop/bin:${PATH}"
+      value: "/opt/hadoop/bin:/opt/hive/bin:${PATH}"
   extraVolumes:
     - name: hadoop-libs
       mountPath: /opt/hadoop/lib
@@ -185,6 +213,9 @@ hive:
     - name: hadoop-conf
       mountPath: /opt/hadoop/etc/hadoop
       subPath: etc/hadoop
+    - name: hive-conf
+      mountPath: /opt/hive/conf
+      subPath: conf
   extraVolumeMounts:
     - name: hadoop-libs
       mountPath: /opt/hadoop/lib
@@ -192,9 +223,26 @@ hive:
     - name: hadoop-conf
       mountPath: /opt/hadoop/etc/hadoop
       subPath: etc/hadoop
+    - name: hive-conf
+      mountPath: /opt/hive/conf
+      subPath: conf
   nodeSelector: {}
   affinity: {}
   tolerations: []
+  service:
+    type: ClusterIP
+    metastorePort: 9083
+    server2Port: 10000
+  persistence:
+    enabled: true
+    storageClass: "local-path"
+    size: 10Gi
+    accessMode: ReadWriteOnce
+  logging:
+    level: DEBUG
+    log4j2:
+      status: INFO
+      monitorInterval: 30
   spark:
     hadoop:
       # Spark SQL Hive settings
@@ -242,3 +290,12 @@ delta:
       # Delta Lake time travel settings
       spark.delta.timeTravel.enabled: "true"
       spark.delta.timeTravel.retentionPeriod: "168h" # 7 days
+
+# PostgreSQL configuration
+postgres:
+  host: "${POSTGRES_HOST}"
+  port: "${POSTGRES_PORT}"
+  database: "${POSTGRES_DB:-hive}"
+  # These values will be stored in the spark-arm-postgres secret
+  user: "${POSTGRES_USER}"
+  password: "${POSTGRES_PASSWORD}"
