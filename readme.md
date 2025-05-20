@@ -1,4 +1,5 @@
 [![Build and Push ARM64 Docker Image](https://github.com/openbiocure/spark-arm/actions/workflows/docker-build.yml/badge.svg)](https://github.com/openbiocure/spark-arm/actions/workflows/docker-build.yml)
+[![Build and Push Hive Image](https://github.com/openbiocure/spark-arm/actions/workflows/hive-build.yml/badge.svg)](https://github.com/openbiocure/spark-arm/actions/workflows/hive-build.yml)
 
 # Spark Cluster for ARM64
 
@@ -7,7 +8,7 @@ A production-ready Apache Spark cluster configuration for ARM64 architecture, fe
 ## Features
 
 - 🐳 Multi-stage Docker build optimized for ARM64
-- 🔄 Automated builds with GitHub Actions
+- 🔄 Automated builds with GitHub Actions for both Spark and Hive images
 - 🔒 Traefik ingress with TLS support
 - 📊 Enhanced logging with rotation
 - 🏥 Health checks and monitoring
@@ -170,21 +171,26 @@ ingress:
 ### Available Make Commands
 
 ```bash
-make build     # Build Docker image
-make push      # Push to registry
-make deploy    # Deploy to Kubernetes
-make undeploy  # Remove deployment
-make logs      # View logs
-make test      # Test cluster readiness
-make clean     # Clean up artifacts
-make help      # Show all commands
+make build        # Build Spark Docker image
+make build-hive   # Build Hive Docker image
+make push         # Push Spark image to registry
+make push-hive    # Push Hive image to registry
+make deploy       # Deploy to Kubernetes
+make undeploy     # Remove deployment
+make logs         # View logs
+make test         # Test cluster readiness
+make clean        # Clean up artifacts
+make help         # Show all commands
 ```
 
 ### Building Locally
 
 ```bash
-# Build for ARM64
+# Build Spark for ARM64
 docker build --platform linux/arm64 -t spark-arm:latest -f docker/Dockerfile .
+
+# Build Hive for ARM64
+docker build --platform linux/arm64 -t hive-arm:latest -f hive/Dockerfile hive
 ```
 
 ### Testing
