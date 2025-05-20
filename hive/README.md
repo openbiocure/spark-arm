@@ -1,14 +1,6 @@
 # Testing
 
 ```
-docker run -it --rm \
-  -e HIVE_METASTORE_DB_HOST=192.168.1.100 \
-  -e HIVE_METASTORE_DB_PORT=5432 \
-  -e HIVE_METASTORE_DB_NAME=hive \
-  -e HIVE_METASTORE_DB_USER=hive \
-  -e HIVE_METASTORE_DB_PASSWORD=hive \
-  -e HIVE_METASTORE_HOST=localhost \
-  -e HIVE_METASTORE_PORT=9083 \
-  -e HIVE_SERVER2_BIND_HOST=0.0.0.0 \
-  -e HIVE_SERVER2_PORT=10000 \
-  hive-arm:v0.6.1
+docker exec -it $(docker ps -qf "ancestor=hive-arm:v0.6.1") bash
+
+```
