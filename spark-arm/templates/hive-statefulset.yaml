@@ -18,9 +18,31 @@ spec:
         {{- include "spark-arm.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: hive
     spec:
-      serviceAccountName: {{ include "spark-arm.serviceAccountName" . }}
+      serviceAccountName: spark
       securityContext:
         fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        - name: init-chown-data
+          image: "{{ .Values.hive.image.repository }}:{{ .Values.hive.image.tag }}"
+          command: 
+            - sh
+            - -c
+            - |
+              chown -R 1000:1000 \
+                /opt/hive/logs \
+                /opt/hive/warehouse \
+                /opt/hive/scratch
+          securityContext:
+            runAsUser: 0  # Run as root to be able to chown
+          volumeMounts:
+            - name: hive-logs
+              mountPath: /opt/hive/logs
+            - name: hive-warehouse
+              mountPath: /opt/hive/warehouse
+            - name: hive-scratch
+              mountPath: /opt/hive/scratch
       containers:
         - name: hive
           image: "{{ .Values.hive.image.repository }}:{{ .Values.hive.image.tag }}"
@@ -28,40 +50,44 @@ spec:
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
-          command:
-            - /bin/bash
-            - -c
-            - start-hive.sh
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
-            # PostgreSQL Connection
+            # PostgreSQL Environment Variables
             - name: POSTGRES_HOST
-              value: "{{ .Values.postgres.host }}"
+              value: "172.16.14.112"
             - name: POSTGRES_PORT
-              value: "{{ .Values.postgres.port }}"
+              value: "5432"
             - name: POSTGRES_USER
-              valueFrom:
-                secretKeyRef:
-                  name: spark-arm-postgres
-                  key: username
+              value: "hive"
             - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: spark-arm-postgres
-                  key: password
+              value: "hive"
             - name: POSTGRES_DB
-              valueFrom:
-                secretKeyRef:
-                  name: spark-arm-postgres
-                  key: database
+              value: "hive"
+            # PostgreSQL Connection
+            - name: HIVE_METASTORE_DB_HOST
+              value: "172.16.14.112"
+            - name: HIVE_METASTORE_DB_PORT
+              value: "5432"
+            - name: HIVE_METASTORE_DB_USER
+              value: "hive"
+            - name: HIVE_METASTORE_DB_PASSWORD
+              value: "hive"
+            - name: HIVE_METASTORE_DB_NAME
+              value: "hive"
             # Hive Metastore
             - name: HIVE_METASTORE_URI
-              value: "thrift://localhost:{{ .Values.hive.service.metastorePort }}"
+              value: "thrift://0.0.0.0:{{ .Values.hive.service.metastorePort }}"
             - name: HIVE_METASTORE_HOST
-              value: "localhost"
+              value: "0.0.0.0"
             - name: HIVE_METASTORE_PORT
-              value: {{ .Values.hive.service.metastorePort | quote }}
+              value: "{{ .Values.hive.service.metastorePort }}"
             # HiveServer2
             - name: HIVE_SERVER2_HOST
+              value: "0.0.0.0"
+            - name: HIVE_SERVER2_BIND_HOST
               value: "0.0.0.0"
             - name: HIVE_SERVER2_PORT
               value: {{ .Values.hive.server2.port | quote }}
@@ -73,27 +99,27 @@ spec:
               value: {{ .Values.hive.server2.sasl.qop | quote }}
             # Hive Directories
             - name: HIVE_WAREHOUSE_DIR
-              value: {{ .Values.hive.warehouseDir | quote }}
+              value: "file:///opt/hive/warehouse"
             - name: HIVE_SCRATCH_DIR
-              value: {{ .Values.hive.scratchDir | quote }}
+              value: "file:///opt/hive/scratch"
             # Hive Logging
             - name: HIVE_LOG_LEVEL
               value: {{ .Values.hive.logging.level | quote }}
-            # MinIO/S3 Configuration
-            - name: AWS_ENDPOINT_URL
-              value: {{ .Values.minio.endpoint | quote }}
+            # MinIO Configuration
+            - name: MINIO_BUCKET
+              value: {{ .Values.minio.bucket | quote }}
             - name: AWS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
                   name: {{ include "spark-arm.fullname" . }}-minio
-                  key: s3a-access-key
+                  key: access-key
             - name: AWS_SECRET_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   name: {{ include "spark-arm.fullname" . }}-minio
-                  key: s3a-secret-key
-            - name: MINIO_BUCKET
-              value: {{ .Values.minio.bucket | quote }}
+                  key: secret-key
+            - name: AWS_ENDPOINT_URL
+              value: {{ .Values.minio.endpoint | quote }}
             {{- with .Values.hive.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -119,9 +145,6 @@ spec:
             - name: hadoop-conf
               mountPath: /opt/hadoop/etc/hadoop
               subPath: etc/hadoop
-            - name: hive-conf
-              mountPath: /opt/hive/conf
-              subPath: conf
       volumes:
         - name: hive-logs
           persistentVolumeClaim:
@@ -135,8 +158,6 @@ spec:
         - name: hadoop-libs
           emptyDir: {}
         - name: hadoop-conf
-          emptyDir: {}
-        - name: hive-conf
           emptyDir: {}
       {{- with .Values.hive.nodeSelector }}
       nodeSelector:

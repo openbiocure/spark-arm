@@ -1,126 +1,133 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
 <configuration>
-    <!-- PostgreSQL Metastore Configuration -->
+    <!-- Hive Metastore Configuration -->
     <property>
         <name>javax.jdo.option.ConnectionURL</name>
         <value>jdbc:postgresql://${HIVE_METASTORE_DB_HOST}:${HIVE_METASTORE_DB_PORT}/${HIVE_METASTORE_DB_NAME}</value>
+        <description>JDBC connect string for a JDBC metastore</description>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionDriverName</name>
         <value>org.postgresql.Driver</value>
+        <description>Driver class name for a JDBC metastore</description>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionUserName</name>
         <value>${HIVE_METASTORE_DB_USER}</value>
+        <description>Username to use against metastore database</description>
     </property>
     <property>
         <name>javax.jdo.option.ConnectionPassword</name>
         <value>${HIVE_METASTORE_DB_PASSWORD}</value>
-    </property>
-
-    <!-- DataNucleus Configuration -->
-    <property>
-        <name>datanucleus.schema.autoCreateTables</name>
-        <value>true</value>
-        <description>Enable automatic table creation for DataNucleus</description>
-    </property>
-    <property>
-        <name>datanucleus.schema.autoCreateColumns</name>
-        <value>true</value>
-        <description>Enable automatic column creation for DataNucleus</description>
-    </property>
-    <property>
-        <name>datanucleus.schema.validateTables</name>
-        <value>false</value>
-        <description>Disable table validation for DataNucleus</description>
-    </property>
-    <property>
-        <name>datanucleus.schema.autoCreateConstraints</name>
-        <value>true</value>
-        <description>Enable automatic constraint creation for DataNucleus</description>
-    </property>
-    <property>
-        <name>datanucleus.autoStartMechanism</name>
-        <value>SchemaTable</value>
-        <description>Use SchemaTable for auto-start mechanism</description>
-    </property>
-    <property>
-        <name>datanucleus.rdbms.datastoreAdapterClassName</name>
-        <value>org.datanucleus.store.rdbms.adapter.PostgreSQLAdapter</value>
-        <description>PostgreSQL adapter for DataNucleus</description>
-    </property>
-    <property>
-        <name>datanucleus.connectionPoolingType</name>
-        <value>None</value>
-        <description>Disable connection pooling</description>
-    </property>
-    <property>
-        <name>datanucleus.fixedDatastore</name>
-        <value>false</value>
-        <description>Allow schema updates</description>
-    </property>
-
-    <!-- Hive Server2 Configuration -->
-    <property>
-        <name>hive.server2.thrift.port</name>
-        <value>${HIVE_SERVER2_PORT}</value>
-    </property>
-    <property>
-        <name>hive.server2.thrift.bind.host</name>
-        <value>${HIVE_SERVER2_BIND_HOST}</value>
-    </property>
-    <property>
-        <name>hive.server2.enable.doAs</name>
-        <value>false</value>
-    </property>
-    <property>
-        <name>hive.server2.authentication</name>
-        <value>NONE</value>
-    </property>
-    <property>
-        <name>hive.server2.thrift.sasl.qop</name>
-        <value>none</value>
-    </property>
-    <property>
-        <name>hive.server2.thrift.sasl.enabled</name>
-        <value>false</value>
-    </property>
-
-    <!-- Hive Metastore Configuration -->
-    <property>
-        <name>hive.metastore.uris</name>
-        <value>thrift://${HIVE_METASTORE_HOST}:${HIVE_METASTORE_PORT}</value>
-    </property>
-    <property>
-        <name>hive.metastore.schema.verification</name>
-        <value>false</value>
-        <description>Disable schema verification</description>
-    </property>
-    <property>
-        <name>metastore.metastore.event.db.notification.api.auth</name>
-        <value>false</value>
+        <description>Password to use against metastore database</description>
     </property>
 
     <!-- Hive Warehouse Configuration -->
     <property>
         <name>hive.metastore.warehouse.dir</name>
         <value>${HIVE_WAREHOUSE_DIR}</value>
-        <description>
-            Location of default database for the warehouse.
-            This directory must exist and be writable by the Hive user.
-            Default HDFS path is /user/hive/warehouse, but we use /opt/hive/warehouse
-            to avoid HDFS dependency and permission issues.
-        </description>
+        <description>Location of default database for the warehouse</description>
     </property>
     <property>
         <name>hive.exec.scratchdir</name>
         <value>${HIVE_SCRATCH_DIR}</value>
-        <description>
-            Scratch space for Hive jobs.
-            This directory must exist and be writable by the Hive user.
-            Default HDFS path is /tmp/hive, but we use /opt/hive/scratch
-            to avoid HDFS dependency and permission issues.
-        </description>
+        <description>Scratch space for Hive jobs</description>
+    </property>
+
+    <!-- Hive Server2 Configuration -->
+    <property>
+        <name>hive.server2.thrift.bind.host</name>
+        <value>${HIVE_SERVER2_HOST}</value>
+        <description>Bind host on which to run the HiveServer2 Thrift service</description>
+    </property>
+    <property>
+        <name>hive.server2.thrift.port</name>
+        <value>${HIVE_SERVER2_PORT}</value>
+        <description>Port number of HiveServer2 Thrift interface</description>
+    </property>
+    <property>
+        <name>hive.server2.authentication</name>
+        <value>${HIVE_SERVER2_AUTHENTICATION}</value>
+        <description>Authentication type for HiveServer2</description>
+    </property>
+    <property>
+        <name>hive.server2.enable.doAs</name>
+        <value>false</value>
+        <description>Setting this property to true will have HiveServer2 execute
+            Hive operations as the user making the calls to it</description>
+    </property>
+
+    <!-- Hive Metastore Configuration -->
+    <property>
+        <name>hive.metastore.uris</name>
+        <value>${HIVE_METASTORE_URI}</value>
+        <description>Thrift URI for the remote metastore</description>
+    </property>
+    <property>
+        <name>hive.metastore.schema.verification</name>
+        <value>false</value>
+        <description>Enforce metastore schema version consistency</description>
+    </property>
+
+    <!-- Hive Execution Configuration -->
+    <property>
+        <name>hive.exec.dynamic.partition.mode</name>
+        <value>nonstrict</value>
+        <description>In strict mode, the user must specify at least one static partition
+            in case the user accidentally overwrites all partitions</description>
+    </property>
+    <property>
+        <name>hive.exec.dynamic.partition</name>
+        <value>true</value>
+        <description>Whether or not to allow dynamic partitions in DML/DDL</description>
+    </property>
+
+    <!-- Hive Logging Configuration -->
+    <property>
+        <name>hive.log.level</name>
+        <value>${HIVE_LOG_LEVEL}</value>
+        <description>Log level for Hive</description>
+    </property>
+
+    <!-- Hive Authorization Configuration -->
+    <property>
+        <name>hive.security.authorization.enabled</name>
+        <value>false</value>
+        <description>Enable or disable the Hive client authorization</description>
+    </property>
+
+    <!-- Hive Metastore Authorization Configuration -->
+    <property>
+        <name>hive.metastore.event.db.notification.api.auth</name>
+        <value>${NOTIFICATION_API_AUTH}</value>
+        <description>Disable auth checks for notification API (e.g., get_current_notificationEventId)</description>
+    </property>
+    <property>
+        <name>hive.metastore.execute.setugi</name>
+        <value>${METASTORE_SETUGI}</value>
+        <description>Disable setugi (set user/group ID) functionality in the metastore</description>
+    </property>
+
+    <!-- Hive Metastore Schema Configuration -->
+    <property>
+        <name>datanucleus.schema.autoCreateAll</name>
+        <value>true</value>
+        <description>Auto creates necessary schema on a startup if one doesn't exist</description>
+    </property>
+    <property>
+        <name>datanucleus.autoCreateSchema</name>
+        <value>true</value>
+        <description>Auto creates necessary schema on a startup if one doesn't exist</description>
+    </property>
+    <property>
+        <name>datanucleus.fixedDatastore</name>
+        <value>false</value>
+        <description>If set to true, the datastore is "fixed" and never modified</description>
+    </property>
+    <property>
+        <name>datanucleus.autoCreateTables</name>
+        <value>true</value>
+        <description>Auto creates tables</description>
     </property>
 </configuration> 

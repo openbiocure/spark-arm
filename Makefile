@@ -50,12 +50,38 @@ lint:
 
 # Deploy the Spark cluster using Helm
 deploy: export-env lint
-	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	helm upgrade --install spark-arm spark-arm \
-		--namespace $(NAMESPACE) \
-		--values $(VALUES_FILE) \
-		--set image.tag=$(VERSION) \
-		--set hive.image.tag=$(VERSION)
+	@echo "Loading environment variables from debug.env..."
+	@if [ -f debug.env ]; then \
+		MINIO_ACCESS_KEY=$$(grep AWS_ACCESS_KEY_ID debug.env | cut -d '=' -f2); \
+		MINIO_SECRET_KEY=$$(grep AWS_SECRET_ACCESS_KEY debug.env | cut -d '=' -f2); \
+		MINIO_ENDPOINT=$$(grep AWS_ENDPOINT_URL debug.env | cut -d '=' -f2); \
+		MINIO_BUCKET=$$(grep MINIO_BUCKET debug.env | cut -d '=' -f2); \
+		POSTGRES_HOST=$$(grep POSTGRES_HOST debug.env | cut -d '=' -f2); \
+		POSTGRES_PORT=$$(grep POSTGRES_PORT debug.env | cut -d '=' -f2); \
+		POSTGRES_DB=$$(grep POSTGRES_DB debug.env | cut -d '=' -f2); \
+		POSTGRES_USER=$$(grep POSTGRES_USER debug.env | cut -d '=' -f2); \
+		POSTGRES_PASSWORD=$$(grep POSTGRES_PASSWORD debug.env | cut -d '=' -f2); \
+		TAG=$$(cat tag); \
+		kubectl create namespace spark --dry-run=client -o yaml | kubectl apply -f -; \
+		MINIO_ACCESS_KEY=$$MINIO_ACCESS_KEY MINIO_SECRET_KEY=$$MINIO_SECRET_KEY MINIO_ENDPOINT=$$MINIO_ENDPOINT MINIO_BUCKET=$$MINIO_BUCKET POSTGRES_HOST=$$POSTGRES_HOST POSTGRES_PORT=$$POSTGRES_PORT POSTGRES_DB=$$POSTGRES_DB POSTGRES_USER=$$POSTGRES_USER POSTGRES_PASSWORD=$$POSTGRES_PASSWORD \
+		helm upgrade --install spark-arm spark-arm \
+			--namespace spark \
+			--values spark-arm/values.yaml \
+			--set image.tag=$$TAG \
+			--set hive.image.tag=$$TAG \
+			--set hive.metastore.db.host=$${POSTGRES_HOST:-postgresql} \
+			--set hive.metastore.db.port=$${POSTGRES_PORT:-5432} \
+			--set hive.metastore.db.name=$${POSTGRES_DB:-hive} \
+			--set hive.metastore.db.user=$${POSTGRES_USER:-hive} \
+			--set hive.metastore.db.password=$${POSTGRES_PASSWORD:-hive} \
+			--set minio.endpoint=$${MINIO_ENDPOINT:-http://minio:9000} \
+			--set minio.bucket=$${MINIO_BUCKET:-spark-data} \
+			--set minio.credentials.accessKey=$${MINIO_ACCESS_KEY} \
+			--set minio.credentials.secretKey=$${MINIO_SECRET_KEY}; \
+	else \
+		echo "Error: debug.env file not found"; \
+		exit 1; \
+	fi
 
 # Undeploy the Spark cluster
 undeploy:
@@ -70,7 +96,7 @@ build-hive: verify-urls
 	@echo "Building Hive Docker image..."
 	@TAG=$$(cat tag); \
 	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | grep -v '^#' | grep -v '^$$' | tr '\n' ' ' | sed 's/^ *//;s/ *$$//' | awk '{for(i=1;i<=NF;i++) printf "--build-arg %s ", $$i}'); \
-	BUILD_CMD="docker build --platform linux/arm64 -t hive-arm:$$TAG $$BUILD_ARGS -f hive/Dockerfile hive"; \
+	BUILD_CMD="docker build --platform linux/arm64 -t hive-arm:$$TAG $$BUILD_ARGS --build-arg IMAGE_VERSION=$$TAG -f hive/Dockerfile hive"; \
 	echo "Debug: Build command: $$BUILD_CMD"; \
 	eval "$$BUILD_CMD"; \
 	docker tag hive-arm:$$TAG $(HIVE_IMAGE_NAME):$(IMAGE_TAG); \

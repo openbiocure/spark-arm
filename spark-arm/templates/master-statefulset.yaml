@@ -44,42 +44,55 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: SPARK_PUBLIC_DNS
-              value: {{ include "spark-arm.fullname" . }}-master
+              value: spark-arm-master
             - name: SPARK_DAEMON_JAVA_OPTS
               value: >-
                 -Dspark.deploy.recoveryMode=NONE 
                 -Dspark.master.rest.enabled=false
-                {{- if .Values.minio.enabled }}
                 -Dspark.hadoop.fs.s3a.access.key=$(MINIO_ACCESS_KEY)
                 -Dspark.hadoop.fs.s3a.secret.key=$(MINIO_SECRET_KEY)
-                {{- end }}
-                {{- if .Values.hive.enabled }}
-                {{- range $key, $value := .Values.hive.spark.hadoop }}
-                -D{{ $key }}={{ $value | quote }}
-                {{- end }}
-                {{- end }}
-                {{- if .Values.delta.enabled }}
-                {{- range $key, $value := .Values.delta.spark.hadoop }}
-                -D{{ $key }}={{ $value | quote }}
-                {{- end }}
-                {{- end }}
-            {{- if .Values.minio.enabled }}
+                -Dspark.hadoop.datanucleus.autoCreateSchema="true"
+                -Dspark.hadoop.datanucleus.autoCreateTables="true"
+                -Dspark.hadoop.datanucleus.fixedDatastore="false"
+                -Dspark.hadoop.datanucleus.schema.autoCreateAll="true"
+                -Dspark.hadoop.javax.jdo.option.ConnectionDriverName="org.postgresql.Driver"
+                -Dspark.hadoop.javax.jdo.option.ConnectionPassword="${POSTGRES_PASSWORD}"
+                -Dspark.hadoop.javax.jdo.option.ConnectionURL="jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+                -Dspark.hadoop.javax.jdo.option.ConnectionUserName="${POSTGRES_USER}"
+                -Dspark.sql.catalogImplementation="hive"
+                -Dspark.sql.warehouse.dir="s3a://${MINIO_BUCKET}/warehouse"
+                -Dspark.delta.autoCompact.enabled="true"
+                -Dspark.delta.autoOptimize.autoCompact="true"
+                -Dspark.delta.autoOptimize.optimizeWrite="true"
+                -Dspark.delta.concurrent.writes.enabled="true"
+                -Dspark.delta.concurrent.writes.maxConcurrentWrites="10"
+                -Dspark.delta.logStore.class="org.apache.spark.sql.delta.storage.S3SingleDriverLogStore"
+                -Dspark.delta.merge.repartitionBeforeWrite="true"
+                -Dspark.delta.optimizeWrite.enabled="true"
+                -Dspark.delta.optimizeWrite.numShuffleBlocks="200"
+                -Dspark.delta.optimizeWrite.targetFileSize="128m"
+                -Dspark.delta.schema.autoMerge.enabled="true"
+                -Dspark.delta.storage.s3.impl="org.apache.hadoop.fs.s3a.S3AFileSystem"
+                -Dspark.delta.storage.s3a.impl="org.apache.hadoop.fs.s3a.S3AFileSystem"
+                -Dspark.delta.timeTravel.enabled="true"
+                -Dspark.delta.timeTravel.retentionPeriod="168h"
+                -Dspark.delta.warehouse.dir="s3a://${MINIO_BUCKET}/delta"
+                -Dspark.sql.catalog.spark_catalog="org.apache.spark.sql.delta.catalog.DeltaCatalog"
+                -Dspark.sql.extensions="io.delta.sql.DeltaSparkSessionExtension"
             - name: MINIO_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "spark-arm.fullname" . }}-minio-credentials
-                  key: accessKey
+                  name: spark-arm-minio
+                  key: access-key
             - name: MINIO_SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "spark-arm.fullname" . }}-minio-credentials
-                  key: secretKey
-            {{- end }}
-            {{- if .Values.hive.enabled }}
+                  name: spark-arm-minio
+                  key: secret-key
             - name: POSTGRES_HOST
-              value: "{{ .Values.postgres.host }}"
+              value: "postgresql"
             - name: POSTGRES_PORT
-              value: "{{ .Values.postgres.port }}"
+              value: "5432"
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
@@ -96,8 +109,7 @@ spec:
                   name: spark-arm-postgres
                   key: password
             - name: HIVE_METASTORE_HOST
-              value: {{ .Values.hive.metastore.host | quote }}
-            {{- end }}
+              value: "postgresql"
             - name: SPARK_MASTER_HOST
               value: "0.0.0.0"
             - name: SPARK_MASTER_PORT

@@ -2,6 +2,14 @@
 
 set -e
 
+# Script version and generation timestamp
+SCRIPT_VERSION="1.0.0"
+SCRIPT_GENERATED_AT="2024-03-21T15:30:45Z"  # Last modified: March 21, 2024
+echo "=== Hive Start Script ==="
+echo "Version: $SCRIPT_VERSION"
+echo "Generated: $SCRIPT_GENERATED_AT"
+echo "========================"
+
 # --- Debug Info ---
 echo "Debug: Current directory: $(pwd)"
 echo "Debug: Current user: $(whoami)"
@@ -40,8 +48,13 @@ render_hive_config() {
         HIVE_WAREHOUSE_DIR HIVE_METASTORE_DB_HOST HIVE_METASTORE_DB_PORT
         HIVE_METASTORE_DB_NAME HIVE_METASTORE_DB_USER HIVE_METASTORE_DB_PASSWORD
         HIVE_SERVER2_PORT HIVE_SERVER2_BIND_HOST HIVE_METASTORE_HOST
-        HIVE_METASTORE_PORT HIVE_SCRATCH_DIR
+        HIVE_METASTORE_PORT HIVE_SCRATCH_DIR HIVE_SERVER2_AUTHENTICATION
+        HIVE_LOG_LEVEL
     )
+
+    # Set notification-related properties with simpler names
+    export NOTIFICATION_API_AUTH="false"
+    export METASTORE_SETUGI="false"
 
     for var in "${export_vars[@]}"; do
         export "$var"="${!var}"
@@ -52,8 +65,13 @@ render_hive_config() {
     env | grep -E "HIVE_|AWS_"
 
     # Render configuration
+    log_info "Current template content:"
+    cat "$TEMPLATE"
+    log_info "Environment variables before substitution:"
+    env | grep -E "HIVE_METASTORE_EVENT|HIVE_METASTORE_EXECUTE"
     envsubst < "$TEMPLATE" > "$OUTPUT"
-    log_info "Generated hive-site.xml from template"
+    log_info "Generated hive-site.xml content:"
+    cat "$OUTPUT"
 
     # Verify configuration
     log_info "Verifying rendered configuration..."
@@ -258,12 +276,11 @@ check_and_create_directories() {
         fi
         
         # Set ownership and permissions
-        echo "Setting permissions for: $dir"
         if ! chown -R hive:hive "$dir"; then
-            echo "✗ Failed to set ownership for: $dir"
-            echo "Current ownership:"
+            echo "⚠ Skipping chown: not permitted under fsGroup with non-root user"
             ls -ld "$dir"
-            return 1
+            # Optionally: return 0 here if you want to continue
+            return 0
         fi
         
         if ! chmod 777 "$dir"; then

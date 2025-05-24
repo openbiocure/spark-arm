@@ -16,16 +16,10 @@ minio:
   # External MinIO service configuration
   endpoint: "${AWS_ENDPOINT_URL}"
   bucket: "${MINIO_BUCKET:-spark-data}" # Default to spark-data if not set
-  # MinIO credentials (provided via secret)
+  # MinIO credentials (provided via environment variables)
   credentials:
-    accessKey:
-      secretKeyRef:
-        name: spark-arm-minio
-        key: access-key
-    secretKey:
-      secretKeyRef:
-        name: spark-arm-minio
-        key: secret-key
+    accessKey: "${AWS_ACCESS_KEY_ID}"
+    secretKey: "${AWS_SECRET_ACCESS_KEY}"
   # Spark integration settings
   spark:
     hadoop:
@@ -171,14 +165,19 @@ hive:
   image:
     repository: ghcr.io/openbiocure/hive-arm
     tag: ${VERSION}
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   metastore:
     enabled: true
-    host: "${POSTGRES_HOST}"
-    port: "${POSTGRES_PORT}"
-    user: "${POSTGRES_USER}"
-    password: "${POSTGRES_PASSWORD}"
-    dbName: "${POSTGRES_DB:-hive}"
+    # External PostgreSQL configuration
+    postgres:
+      host: "${POSTGRES_HOST}"
+      port: "${POSTGRES_PORT}"
+      # Credentials are managed through Kubernetes secrets
+      secretName: spark-arm-postgres
+      secretKeys:
+        username: username
+        password: password
+        database: database
   server2:
     enabled: true
     port: 10000
@@ -205,7 +204,7 @@ hive:
     - name: HIVE_CONF_DIR
       value: "/opt/hive/conf"
     - name: PATH
-      value: "/opt/hadoop/bin:/opt/hive/bin:${PATH}"
+      value: "/usr/bin:/usr/local/bin:/opt/hadoop/bin:/opt/hive/bin:${PATH}"
   extraVolumes:
     - name: hadoop-libs
       mountPath: /opt/hadoop/lib
@@ -213,9 +212,6 @@ hive:
     - name: hadoop-conf
       mountPath: /opt/hadoop/etc/hadoop
       subPath: etc/hadoop
-    - name: hive-conf
-      mountPath: /opt/hive/conf
-      subPath: conf
   extraVolumeMounts:
     - name: hadoop-libs
       mountPath: /opt/hadoop/lib
@@ -223,9 +219,6 @@ hive:
     - name: hadoop-conf
       mountPath: /opt/hadoop/etc/hadoop
       subPath: etc/hadoop
-    - name: hive-conf
-      mountPath: /opt/hive/conf
-      subPath: conf
   nodeSelector: {}
   affinity: {}
   tolerations: []
@@ -292,10 +285,9 @@ delta:
       spark.delta.timeTravel.retentionPeriod: "168h" # 7 days
 
 # PostgreSQL configuration
+# Note: Credentials are managed through Kubernetes secrets
+# See postgres-secret.yaml for actual values
 postgres:
-  host: "${POSTGRES_HOST}"
-  port: "${POSTGRES_PORT}"
-  database: "${POSTGRES_DB:-hive}"
-  # These values will be stored in the spark-arm-postgres secret
-  user: "${POSTGRES_USER}"
-  password: "${POSTGRES_PASSWORD}"
+  enabled: false # Set to true if you want to deploy PostgreSQL as part of the chart
+  host: "${POSTGRES_HOST}" # External PostgreSQL host
+  port: "${POSTGRES_PORT}" # External PostgreSQL port

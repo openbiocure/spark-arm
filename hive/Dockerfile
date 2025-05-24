@@ -8,11 +8,12 @@ ARG HADOOP_VERSION
 ARG HIVE_VERSION
 ARG POSTGRES_VERSION
 ARG POSTGRES_URL_TEMPLATE
+ARG IMAGE_VERSION
 
 # Set environment variables
 ENV HADOOP_HOME=/opt/hadoop \
     HIVE_HOME=/opt/hive \
-    PATH=/opt/hadoop/bin:/opt/hive/bin:$PATH \
+    PATH=/usr/bin:/usr/local/bin:/opt/hadoop/bin:/opt/hive/bin:$PATH \
     SERVICE_NAME=metastore \
     DB_DRIVER=postgres \
     SERVICE_OPTS="-Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver \
@@ -36,17 +37,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create necessary directories and set permissions
-RUN mkdir -p ${HADOOP_HOME} ${HIVE_HOME}/logs ${HIVE_HOME}/conf ${HIVE_HOME}/warehouse ${HIVE_HOME}/scratch \
-    && groupadd -r hive && useradd -r -g hive hive \
+RUN mkdir -p ${HADOOP_HOME} ${HIVE_HOME}/conf ${HIVE_HOME}/warehouse ${HIVE_HOME}/scratch \
+    && mkdir -p /opt/hive/logs \
+    && groupadd -r -g 1000 hive \
+    && useradd -r -u 1000 -g hive -d ${HIVE_HOME} -s /bin/bash hive \
+    && echo "hive:x:1000:1000::${HIVE_HOME}:/bin/bash" >> /etc/passwd \
+    && echo "hive:x:1000:" >> /etc/group \
     && chown -R hive:hive ${HADOOP_HOME} ${HIVE_HOME} \
+    && chown 1000:1000 /opt/hive/logs \
     && chmod 755 ${HADOOP_HOME} ${HIVE_HOME} \
-    && chmod 777 ${HIVE_HOME}/logs ${HIVE_HOME}/warehouse ${HIVE_HOME}/scratch \
+    && chmod 777 /opt/hive/logs \
+    && chmod 777 ${HIVE_HOME}/warehouse ${HIVE_HOME}/scratch \
     && chmod 777 /tmp \
     && chmod -R 775 ${HIVE_HOME}/conf \
     && chown -R hive:hive ${HIVE_HOME}/conf \
     && touch ${HIVE_HOME}/warehouse/.testfile && rm ${HIVE_HOME}/warehouse/.testfile \
     && echo "Directory permissions verified" \
-    && ls -la ${HIVE_HOME}
+    && ls -la ${HIVE_HOME} \
+    && ls -la /opt/hive/logs
 
 # Copy installation scripts
 COPY scripts/logging.sh scripts/install-hadoop.sh scripts/install-hive.sh /tmp/
@@ -71,7 +79,8 @@ COPY conf/hdfs-site.xml ${HADOOP_HOME}/etc/hadoop/
 RUN chown -R hive:hive ${HIVE_HOME}/conf ${HADOOP_HOME}/etc/hadoop \
     && chmod -R 775 ${HIVE_HOME}/conf ${HADOOP_HOME}/etc/hadoop \
     && chmod 644 ${HIVE_HOME}/conf/hive-log4j2.properties \
-    && echo "Log4j2 configuration copied and permissions set"
+    && echo "Log4j2 configuration copied and permissions set" \
+    && ls -la ${HIVE_HOME}/conf/hive-site.xml.template
 
 # Create hive-env.sh with driver configuration
 RUN echo "export HIVE_AUX_JARS_PATH=${HIVE_HOME}/lib/postgresql.jar" > ${HIVE_HOME}/conf/hive-env.sh && \
