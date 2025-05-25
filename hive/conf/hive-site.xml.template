@@ -37,6 +37,11 @@
 
     <!-- Hive Server2 Configuration -->
     <property>
+        <name>hive.server2.enabled</name>
+        <value>${HIVE_SERVER2_ENABLED:-false}</value>
+        <description>Whether to enable HiveServer2. Set to false to run only the metastore service.</description>
+    </property>
+    <property>
         <name>hive.server2.thrift.bind.host</name>
         <value>${HIVE_SERVER2_HOST}</value>
         <description>Bind host on which to run the HiveServer2 Thrift service</description>

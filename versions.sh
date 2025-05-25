@@ -6,7 +6,7 @@ get_versions() {
     local SPARK_VERSION="3.5.5"
     local HADOOP_VERSION="3.3.6"
     local DELTA_VERSION="3.3.1"
-    local HIVE_VERSION="3.1.3"
+    local HIVE_VERSION="3.0.0"
     local POSTGRES_VERSION="42.7.3"
     local AWS_SDK_VERSION="1.12.262"
     local SCALA_VERSION="2.13"
@@ -20,7 +20,7 @@ get_versions() {
     local DELTA_URL="https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_VERSION}/delta-spark_${SCALA_VERSION}-${DELTA_VERSION}.jar"
     
     # Hive
-    local HIVE_URL="https://dlcdn.apache.org/hive/hive-${HIVE_VERSION}/apache-hive-${HIVE_VERSION}-bin.tar.gz"
+    local HIVE_URL="https://dlcdn.apache.org/hive/hive-standalone-metastore-3.0.0/hive-standalone-metastore-3.0.0-bin.tar.gz"
     
     # Database
     local POSTGRES_URL="https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_VERSION}/postgresql-${POSTGRES_VERSION}.jar"

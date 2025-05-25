@@ -85,7 +85,7 @@ image:
   repository: ghcr.io/openbiocure/spark-arm
   # Default tag, will be overridden by version from tag file during deployment
   tag: ${VERSION}
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # Service configuration
 service:
@@ -179,7 +179,13 @@ hive:
         password: password
         database: database
   server2:
-    enabled: true
+    # WARNING: Changing this setting requires rebuilding the Hive image
+    # - When enabled: Requires full Hive package with HiveServer2 classes
+    # - When disabled: Uses lightweight metastore-only package
+    # Current setup uses metastore-only package, enabling this will cause
+    # "ClassNotFoundException: org.apache.hive.service.server.HiveServer2"
+    # unless the image is rebuilt with full Hive package
+    enabled: false # Disabled since we only need metastore functionality
     port: 10000
     authentication: NONE
     sasl:
@@ -205,6 +211,8 @@ hive:
       value: "/opt/hive/conf"
     - name: PATH
       value: "/usr/bin:/usr/local/bin:/opt/hadoop/bin:/opt/hive/bin:${PATH}"
+    - name: HIVE_SERVER2_ENABLED
+      value: "false" # Explicitly disable HiveServer2 since we only need metastore
   extraVolumes:
     - name: hadoop-libs
       mountPath: /opt/hadoop/lib

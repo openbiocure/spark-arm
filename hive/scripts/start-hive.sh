@@ -3,8 +3,8 @@
 set -e
 
 # Script version and generation timestamp
-SCRIPT_VERSION="1.0.0"
-SCRIPT_GENERATED_AT="2024-03-21T15:30:45Z"  # Last modified: March 21, 2024
+SCRIPT_VERSION="1.6.0"
+SCRIPT_GENERATED_AT="2024-05-25T19:35:00Z"  # Last modified: May 25, 2024
 echo "=== Hive Start Script ==="
 echo "Version: $SCRIPT_VERSION"
 echo "Generated: $SCRIPT_GENERATED_AT"
@@ -189,32 +189,152 @@ wait_for_service() {
 setup_logging_config() {
     log_info "Setting up logging configuration..."
     
-    # Copy and configure log4j2 properties
-    local log4j_template="${HIVE_HOME}/conf/hive-log4j2.properties.template"
-    local log4j_props="${HIVE_HOME}/conf/hive-log4j2.properties"
-    
-    if [[ ! -f "$log4j_template" ]]; then
-        log_error "Log4j2 template not found: $log4j_template"
-        return 1
-    fi
-    
-    # Copy template to actual properties file
-    cp "$log4j_template" "$log4j_props"
-    chmod 644 "$log4j_props"
+    local conf_dir="${HIVE_HOME}/conf"
+    local original_log4j="${conf_dir}/hive-log4j2.properties"
+    local target_log4j="${conf_dir}/log4j2.xml"
+    local legacy_log4j="${conf_dir}/log4j.properties"
     
     # Ensure log directory exists and is writable
     mkdir -p "${HIVE_HOME}/logs"
     chmod 777 "${HIVE_HOME}/logs"
     
-    # Set up environment variables for logging
-    export HADOOP_OPTS+=" -Dhive.log.dir=${HIVE_HOME}/logs"
-    export HADOOP_OPTS+=" -Dhive.log.level=DEBUG"
-    export HADOOP_OPTS+=" -Dhive.root.logger=DRFA"
-    export HADOOP_OPTS+=" -Dlog4j2.configurationFile=file://${log4j_props}"
-    export HADOOP_CLIENT_OPTS+=" -Dhive.log.file=${HIVE_HOME}/logs/hiveserver2.log"
-    export HADOOP_CLIENT_OPTS+=" -Dlog4j2.configurationFile=file://${log4j_props}"
+    # If log4j2.xml doesn't exist but hive-log4j2.properties does, copy it
+    if [[ -f "$original_log4j" && ! -f "$target_log4j" ]]; then
+        log_info "Copying $original_log4j to $target_log4j for compatibility..."
+        cp "$original_log4j" "$target_log4j"
+    fi
     
-    log_info "Logging configuration set up at: $log4j_props"
+    # Create a legacy log4j.properties file as fallback
+    if [[ ! -f "$legacy_log4j" ]]; then
+        log_info "Creating legacy log4j.properties for compatibility..."
+        cat <<EOF > "$legacy_log4j"
+# Root logger option
+log4j.rootLogger=\${hive.log.level:-DEBUG}, console, file
+
+# Direct log messages to console
+log4j.appender.console=org.apache.log4j.ConsoleAppender
+log4j.appender.console.Target=System.out
+log4j.appender.console.layout=org.apache.log4j.PatternLayout
+log4j.appender.console.layout.ConversionPattern=[%d{yyyy-MM-dd HH:mm:ss}] %-5p %c{1} [%t] - %m%n
+
+# Direct log messages to a log file
+log4j.appender.file=org.apache.log4j.RollingFileAppender
+log4j.appender.file.File=\${hive.log.dir}/\${hive.log.file}
+log4j.appender.file.MaxFileSize=100MB
+log4j.appender.file.MaxBackupIndex=10
+log4j.appender.file.layout=org.apache.log4j.PatternLayout
+log4j.appender.file.layout.ConversionPattern=[%d{yyyy-MM-dd HH:mm:ss}] %-5p %c{1} [%t] - %m%n
+
+# Set specific logger levels
+log4j.logger.DataNucleus=ERROR
+log4j.logger.org.apache.hadoop.hive.ql.log.PerfLogger=INFO
+log4j.logger.com.amazonaws=WARN
+log4j.logger.org.apache.http=WARN
+EOF
+    fi
+    
+    # If neither exists, create a default XML configuration
+    if [[ ! -f "$target_log4j" ]]; then
+        log_warn "log4j2.xml not found. Creating a default configuration..."
+        # Create file with clean XML declaration first
+        printf '<?xml version="1.0" encoding="UTF-8"?>\n' > "$target_log4j"
+        # Then append the rest of the configuration
+        cat <<EOF >> "$target_log4j"
+<Configuration status="WARN" name="HiveLogConfig" monitorInterval="30">
+    <Properties>
+        <Property name="LOG_PATTERN">[%d{yyyy-MM-dd HH:mm:ss}] %-5p %c{1} [%t] - %m%n</Property>
+        <Property name="LOG_FILE_PATH">\${sys:hive.log.dir}/\${sys:hive.log.file}</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="\${LOG_PATTERN}"/>
+        </Console>
+        
+        <RollingRandomAccessFile name="file" 
+                                fileName="\${LOG_FILE_PATH}"
+                                filePattern="\${LOG_FILE_PATH}.%i">
+            <PatternLayout pattern="\${LOG_PATTERN}"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="100MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingRandomAccessFile>
+    </Appenders>
+
+    <Loggers>
+        <Logger name="DataNucleus" level="ERROR"/>
+        <Logger name="org.apache.hadoop.hive.ql.log.PerfLogger" level="INFO"/>
+        <Logger name="com.amazonaws" level="WARN"/>
+        <Logger name="org.apache.http" level="WARN"/>
+        
+        <Root level="\${sys:hive.log.level:-DEBUG}">
+            <AppenderRef ref="console"/>
+            <AppenderRef ref="file"/>
+        </Root>
+    </Loggers>
+</Configuration>
+EOF
+        log_info "Created default log4j2.xml with both console and file appenders"
+    else
+        # If file exists but might have BOM, recreate it cleanly
+        if ! head -n1 "$target_log4j" | grep -q '^<?xml'; then
+            log_info "Recreating log4j2.xml to ensure clean XML format..."
+            # Backup the existing file
+            mv "$target_log4j" "${target_log4j}.bak"
+            # Create new file with clean XML declaration
+            printf '<?xml version="1.0" encoding="UTF-8"?>\n' > "$target_log4j"
+            # Append the rest of the content, skipping any existing XML declaration
+            grep -v '^<?xml' "${target_log4j}.bak" >> "$target_log4j"
+            rm "${target_log4j}.bak"
+        fi
+    fi
+    
+    # Set up environment variables for logging - using a single source of truth
+    export HIVE_LOG_LEVEL="${HIVE_LOG_LEVEL:-DEBUG}"
+    
+    # Clear any existing HADOOP_OPTS logging settings
+    export HADOOP_OPTS=$(echo "$HADOOP_OPTS" | sed -E 's/-D(hive\.log\.|log4j2?\.).*?( |$)//g')
+    
+    # Set logging system properties in a consistent way - try both log4j2 and legacy properties
+    export HADOOP_OPTS+=" -Dlog4j2.configurationFile=${target_log4j}"
+    export HADOOP_OPTS+=" -Dlog4j.configuration=${legacy_log4j}"
+    export HADOOP_OPTS+=" -Dlog4j.debug=true"
+    export HADOOP_OPTS+=" -Dlog4j2.debug=true"
+    export HADOOP_OPTS+=" -Dlog4j2.statusLogger.level=TRACE"
+    export HADOOP_OPTS+=" -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=TRACE"
+    export HADOOP_OPTS+=" -Dhive.log.dir=${HIVE_HOME}/logs"
+    export HADOOP_OPTS+=" -Dhive.log.level=${HIVE_LOG_LEVEL}"
+    export HADOOP_OPTS+=" -Dhive.perflogger.log.level=${HIVE_LOG_LEVEL}"
+    
+    # Add conf directory to classpath
+    export HADOOP_OPTS+=" -Djava.class.path=${conf_dir}:\${java.class.path}"
+    
+    # Set client options separately
+    export HADOOP_CLIENT_OPTS+=" -Dlog4j2.configurationFile=${target_log4j}"
+    export HADOOP_CLIENT_OPTS+=" -Dlog4j.configuration=${legacy_log4j}"
+    export HADOOP_CLIENT_OPTS+=" -Dlog4j.debug=true"
+    export HADOOP_CLIENT_OPTS+=" -Dlog4j2.debug=true"
+    export HADOOP_CLIENT_OPTS+=" -Dlog4j2.statusLogger.level=TRACE"
+    export HADOOP_CLIENT_OPTS+=" -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=TRACE"
+    export HADOOP_CLIENT_OPTS+=" -Dhive.log.dir=${HIVE_HOME}/logs"
+    export HADOOP_CLIENT_OPTS+=" -Dhive.log.level=${HIVE_LOG_LEVEL}"
+    export HADOOP_CLIENT_OPTS+=" -Djava.class.path=${conf_dir}:\${java.class.path}"
+    
+    log_info "Logging configuration set up at: $target_log4j (and $legacy_log4j as fallback)"
+    log_info "HIVE_LOG_LEVEL set to: ${HIVE_LOG_LEVEL}"
+    log_info "HADOOP_OPTS logging settings:"
+    echo "$HADOOP_OPTS" | tr ' ' '\n' | grep -E 'hive\.log\.|log4j'
+    
+    # Verify the log4j2 configuration files
+    echo "===== Log4j2 Config Files ====="
+    echo "XML Config:"
+    ls -l "$target_log4j"
+    cat "$target_log4j"
+    echo -e "\nLegacy Config:"
+    ls -l "$legacy_log4j"
+    cat "$legacy_log4j"
+    
     return 0
 }
 
@@ -328,30 +448,62 @@ start_metastore() {
     # Check and fix logging
     check_and_fix_logging
     
+    # Setup logging configuration
+    setup_logging_config || {
+        echo "Failed to set up logging configuration"
+        return 1
+    }
+    
     # Start metastore with proper classpath and logging
-    cd /opt/hive && nohup java -cp "/opt/hive/lib/*:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*:/opt/hadoop/share/hadoop/hdfs/*:/opt/hadoop/share/hadoop/hdfs/lib/*:/opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*:/opt/hadoop/share/hadoop/yarn/*:/opt/hadoop/share/hadoop/yarn/lib/*" \
-        -Dlog4j2.configurationFile=file:///opt/hive/conf/hive-log4j2.properties \
-        -Dhive.log.dir=/opt/hive/logs \
-        -Dhive.log.file=metastore.log \
-        -Dhive.log.level=DEBUG \
-        -Djavax.jdo.option.ConnectionDriverName=org.postgresql.Driver \
-        -Djavax.jdo.option.ConnectionURL="jdbc:postgresql://${HIVE_METASTORE_DB_HOST}:${HIVE_METASTORE_DB_PORT}/${HIVE_METASTORE_DB_NAME}" \
-        -Djavax.jdo.option.ConnectionUserName="${HIVE_METASTORE_DB_USER}" \
-        -Djavax.jdo.option.ConnectionPassword="${HIVE_METASTORE_DB_PASSWORD}" \
-        org.apache.hadoop.hive.metastore.HiveMetaStore \
-        --hiveconf hive.metastore.uris=thrift://0.0.0.0:9083 \
-        > /opt/hive/logs/metastore.out 2>&1 &
+    cd "${HIVE_HOME}" && {
+        echo "Starting metastore with logging configuration:"
+        echo "HADOOP_OPTS: $HADOOP_OPTS"
+        echo "Log file: ${HIVE_HOME}/logs/metastore.log"
+        echo "Log level: ${HIVE_LOG_LEVEL:-DEBUG}"
+        
+        nohup java \
+            -cp "${HIVE_HOME}/lib/*:\
+${HADOOP_HOME}/share/hadoop/common/*:\
+${HADOOP_HOME}/share/hadoop/common/lib/*:\
+${HADOOP_HOME}/share/hadoop/hdfs/*:\
+${HADOOP_HOME}/share/hadoop/hdfs/lib/*:\
+${HADOOP_HOME}/share/hadoop/mapreduce/*:\
+${HADOOP_HOME}/share/hadoop/mapreduce/lib/*:\
+${HADOOP_HOME}/share/hadoop/yarn/*:\
+${HADOOP_HOME}/share/hadoop/yarn/lib/*:\
+${HIVE_HOME}/conf" \
+            -Dlog4j2.debug=true \
+            -Dlog4j.debug=true \
+            -Dlog4j2.statusLogger.level=TRACE \
+            -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=TRACE \
+            -Dlog4j2.configurationFile=${HIVE_HOME}/conf/log4j2.xml \
+            -Dlog4j.configuration=${HIVE_HOME}/conf/log4j.properties \
+            -Dhive.log.file=metastore.log \
+            -Dhive.log.dir=${HIVE_HOME}/logs \
+            -Dhive.log.level=${HIVE_LOG_LEVEL:-DEBUG} \
+            org.apache.hadoop.hive.metastore.HiveMetaStore \
+            --hiveconf hive.metastore.uris=thrift://0.0.0.0:9083 \
+            > "${HIVE_HOME}/logs/metastore.out" 2>&1 &
+    }
     
     # Wait for metastore to start
     echo "Waiting for metastore to start..."
     sleep 10
     
-    # Check if metastore is running
+    # Check if metastore is running and verify its logging
     if jps | grep -q "HiveMetaStore"; then
         echo "Hive Metastore started successfully"
+        echo "Checking metastore process and logging:"
+        ps aux | grep HiveMetaStore | grep -v grep
+        echo "Checking metastore log file:"
+        ls -l "${HIVE_HOME}/logs/metastore.log"
+        echo "Last 20 lines of metastore.out:"
+        tail -n 20 "${HIVE_HOME}/logs/metastore.out"
         return 0
     else
-        echo "Failed to start Hive Metastore. Check logs at /opt/hive/logs/metastore.log"
+        echo "Failed to start Hive Metastore. Check logs at ${HIVE_HOME}/logs/metastore.log"
+        echo "Contents of metastore.out:"
+        cat "${HIVE_HOME}/logs/metastore.out"
         return 1
     fi
 }
@@ -425,30 +577,50 @@ start_hiveserver2() {
     # Check and fix logging
     check_and_fix_logging
     
+    # Setup logging configuration
+    setup_logging_config || {
+        echo "Failed to set up logging configuration"
+        return 1
+    }
+    
     # Start HiveServer2 with proper classpath and logging
-    cd /opt/hive && nohup java \
-        --add-opens java.base/java.net=ALL-UNNAMED \
-        --add-opens java.base/java.lang=ALL-UNNAMED \
-        --add-opens java.base/java.nio=ALL-UNNAMED \
-        -cp "/opt/hive/lib/*:/opt/hadoop/share/hadoop/common/*:/opt/hadoop/share/hadoop/common/lib/*:/opt/hadoop/share/hadoop/hdfs/*:/opt/hadoop/share/hadoop/hdfs/lib/*:/opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*:/opt/hadoop/share/hadoop/yarn/*:/opt/hadoop/share/hadoop/yarn/lib/*" \
-        -Dlog4j2.configurationFile=file:///opt/hive/conf/hive-log4j2.properties \
-        -Dhive.log.dir=/opt/hive/logs \
-        -Dhive.log.file=hiveserver2.log \
-        -Dhive.log.level=DEBUG \
-        -Dhive.server2.thrift.sasl.qop=none \
-        -Dhive.server2.authentication=NONE \
-        -Dhive.server2.enable.doAs=false \
-        -Dhive.server2.transport.mode=binary \
-        -Dhive.server2.thrift.min.worker.threads=5 \
-        -Dhive.server2.thrift.max.worker.threads=500 \
-        -Dhive.server2.thrift.sasl.enabled=false \
-        org.apache.hive.service.server.HiveServer2 \
-        --hiveconf hive.server2.thrift.port=10000 \
-        --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
-        --hiveconf hive.server2.logging.operation.enabled=true \
-        --hiveconf hive.server2.logging.operation.verbose=true \
-        --hiveconf hive.metastore.uris=thrift://localhost:9083 \
-        > /opt/hive/logs/hiveserver2.out 2>&1 &
+    cd "${HIVE_HOME}" && {
+        echo "Starting HiveServer2 with logging configuration:"
+        echo "HADOOP_OPTS: $HADOOP_OPTS"
+        echo "Log file: ${HIVE_HOME}/logs/hiveserver2.log"
+        echo "Log level: ${HIVE_LOG_LEVEL:-DEBUG}"
+        
+        nohup java \
+            --add-opens java.base/java.net=ALL-UNNAMED \
+            --add-opens java.base/java.lang=ALL-UNNAMED \
+            --add-opens java.base/java.nio=ALL-UNNAMED \
+            -cp "${HIVE_HOME}/lib/*:\
+${HADOOP_HOME}/share/hadoop/common/*:\
+${HADOOP_HOME}/share/hadoop/common/lib/*:\
+${HADOOP_HOME}/share/hadoop/hdfs/*:\
+${HADOOP_HOME}/share/hadoop/hdfs/lib/*:\
+${HADOOP_HOME}/share/hadoop/mapreduce/*:\
+${HADOOP_HOME}/share/hadoop/mapreduce/lib/*:\
+${HADOOP_HOME}/share/hadoop/yarn/*:\
+${HADOOP_HOME}/share/hadoop/yarn/lib/*:\
+${HIVE_HOME}/conf" \
+            -Dlog4j2.debug=true \
+            -Dlog4j.debug=true \
+            -Dlog4j2.statusLogger.level=TRACE \
+            -Dorg.apache.logging.log4j.simplelog.StatusLogger.level=TRACE \
+            -Dlog4j2.configurationFile=${HIVE_HOME}/conf/log4j2.xml \
+            -Dlog4j.configuration=${HIVE_HOME}/conf/log4j.properties \
+            -Dhive.log.file=hiveserver2.log \
+            -Dhive.log.dir=${HIVE_HOME}/logs \
+            -Dhive.log.level=${HIVE_LOG_LEVEL:-DEBUG} \
+            org.apache.hive.service.server.HiveServer2 \
+            --hiveconf hive.server2.thrift.port=10000 \
+            --hiveconf hive.server2.thrift.bind.host=0.0.0.0 \
+            --hiveconf hive.server2.logging.operation.enabled=true \
+            --hiveconf hive.server2.logging.operation.verbose=true \
+            --hiveconf hive.metastore.uris=thrift://localhost:9083 \
+            > "${HIVE_HOME}/logs/hiveserver2.out" 2>&1 &
+    }
     
     # Wait for HiveServer2 to start
     echo "Waiting for HiveServer2 to start..."
@@ -459,105 +631,79 @@ start_hiveserver2() {
         echo "HiveServer2 started successfully"
         return 0
     else
-        echo "Failed to start HiveServer2. Check logs at /opt/hive/logs/hiveserver2.log"
+        echo "Failed to start HiveServer2. Check logs at ${HIVE_HOME}/logs/hiveserver2.log"
         return 1
     fi
-}
-
-# --- Create Basic Log4j2 Configuration ---
-create_log4j2_config() {
-    local config_file="/opt/hive/conf/hive-log4j2.properties"
-    echo "Creating basic log4j2 configuration at $config_file..."
-    
-    cat > "$config_file" << 'EOF'
-# Basic log4j2 configuration for Hive
-status = INFO
-name = HiveLog4j2Config
-
-# Appenders
-appenders = console, file
-
-# Console appender
-appender.console.type = Console
-appender.console.name = console
-appender.console.layout.type = PatternLayout
-appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %c{1}:%L - %m%n
-
-# File appender
-appender.file.type = RollingFile
-appender.file.name = file
-appender.file.fileName = ${sys:hive.log.dir}/${sys:hive.log.file}
-appender.file.filePattern = ${sys:hive.log.dir}/${sys:hive.log.file}.%d{yyyy-MM-dd}
-appender.file.layout.type = PatternLayout
-appender.file.layout.pattern = %d{yyyy-MM-dd HH:mm:ss.SSS} %-5p %c{1}:%L - %m%n
-appender.file.policies.type = Policies
-appender.file.policies.time.type = TimeBasedTriggeringPolicy
-appender.file.policies.time.interval = 1
-appender.file.policies.time.modulate = true
-appender.file.strategy.type = DefaultRolloverStrategy
-appender.file.strategy.max = 30
-
-# Root logger
-rootLogger.level = ${sys:hive.log.level}
-rootLogger.appenderRefs = console, file
-rootLogger.appenderRef.console.ref = console
-rootLogger.appenderRef.file.ref = file
-
-# Hive logger
-logger.hive.name = org.apache.hadoop.hive
-logger.hive.level = ${sys:hive.log.level}
-logger.hive.additivity = false
-logger.hive.appenderRefs = console, file
-logger.hive.appenderRef.console.ref = console
-logger.hive.appenderRef.file.ref = file
-EOF
-
-    chown hive:hive "$config_file"
-    chmod 644 "$config_file"
-    echo "Created log4j2 configuration with proper permissions"
 }
 
 # --- Check and Fix Logging Configuration ---
 check_and_fix_logging() {
     echo "=== Checking Logging Configuration ==="
+    echo "Current directory: $(pwd)"
+    echo "Current user: $(whoami)"
+    echo "HIVE_HOME: ${HIVE_HOME}"
     
     # Check if log4j2 config exists
     echo "1. Checking log4j2 configuration..."
-    if [[ ! -f "/opt/hive/conf/hive-log4j2.properties" ]]; then
-        echo "hive-log4j2.properties not found in /opt/hive/conf/"
-        echo "Creating basic log4j2 configuration..."
-        create_log4j2_config
+    local conf_dir="${HIVE_HOME}/conf"
+    local log4j_config="${conf_dir}/log4j2.xml"
+    local hive_log4j_config="${conf_dir}/hive-log4j2.properties"
+    echo "Looking for log4j2 config at: $log4j_config"
+    
+    # If log4j2.xml doesn't exist but hive-log4j2.properties does, copy it
+    if [[ -f "$hive_log4j_config" && ! -f "$log4j_config" ]]; then
+        echo "Copying $hive_log4j_config to $log4j_config for compatibility..."
+        cp "$hive_log4j_config" "$log4j_config"
     fi
-    ls -l "/opt/hive/conf/hive-log4j2.properties"
+    
+    if [[ ! -f "$log4j_config" ]]; then
+        echo "✗ log4j2.xml not found in ${conf_dir}/"
+        echo "Contents of ${conf_dir}/:"
+        ls -la "${conf_dir}/"
+        return 1
+    fi
+    echo "✓ Log4j2 config found at: $log4j_config"
+    echo "Log4j2 config status:"
+    ls -l "$log4j_config"
     
     # Check logs directory permissions
     echo -e "\n2. Checking logs directory permissions..."
-    if [[ ! -d "/opt/hive/logs" ]]; then
+    local logs_dir="${HIVE_HOME}/logs"
+    echo "Looking for logs directory at: $logs_dir"
+    if [[ ! -d "$logs_dir" ]]; then
         echo "Creating logs directory..."
-        mkdir -p "/opt/hive/logs"
+        mkdir -p "$logs_dir"
     fi
-    ls -ld "/opt/hive/logs"
-    if [[ ! -w "/opt/hive/logs" ]]; then
+    echo "Logs directory status:"
+    ls -ld "$logs_dir"
+    if [[ ! -w "$logs_dir" ]]; then
         echo "Fixing logs directory permissions..."
-        chown -R hive:hive "/opt/hive/logs"
-        chmod 777 "/opt/hive/logs"
+        chown -R hive:hive "$logs_dir"
+        chmod 777 "$logs_dir"
         echo "New permissions:"
-        ls -ld "/opt/hive/logs"
+        ls -ld "$logs_dir"
     fi
     
     # Create log files with proper permissions
     echo -e "\n3. Creating log files..."
-    touch "/opt/hive/logs/metastore.log" "/opt/hive/logs/hiveserver2.log"
-    chown hive:hive "/opt/hive/logs/metastore.log" "/opt/hive/logs/hiveserver2.log"
-    chmod 666 "/opt/hive/logs/metastore.log" "/opt/hive/logs/hiveserver2.log"
+    local metastore_log="${logs_dir}/metastore.log"
+    local hiveserver2_log="${logs_dir}/hiveserver2.log"
+    echo "Creating log files in: $logs_dir"
+    touch "$metastore_log" "$hiveserver2_log"
+    chown hive:hive "$metastore_log" "$hiveserver2_log"
+    chmod 666 "$metastore_log" "$hiveserver2_log"
     
     # Verify log files exist and are writable
     echo -e "\n4. Verifying log files..."
-    for log_file in "/opt/hive/logs/metastore.log" "/opt/hive/logs/hiveserver2.log"; do
+    for log_file in "$metastore_log" "$hiveserver2_log"; do
         if [[ -f "$log_file" && -w "$log_file" ]]; then
             echo "✓ $log_file exists and is writable"
+            echo "File details:"
+            ls -l "$log_file"
         else
             echo "✗ $log_file is missing or not writable"
+            echo "Directory contents:"
+            ls -la "$(dirname "$log_file")"
             return 1
         fi
     done
@@ -598,12 +744,21 @@ start_metastore || {
     exit 1
 }
 
-# Start HiveServer2
-start_hiveserver2 || {
-    log_error "Failed to start HiveServer2"
-    exit 1
-}
+# Check if HiveServer2 is enabled in configuration
+if grep -q "<name>hive.server2.enabled</name>.*<value>true</value>" "${HIVE_HOME}/conf/hive-site.xml"; then
+    log_info "HiveServer2 is enabled in configuration, starting..."
+    start_hiveserver2 || {
+        log_error "Failed to start HiveServer2"
+        exit 1
+    }
+else
+    log_info "HiveServer2 is disabled in configuration, skipping..."
+fi
 
 # Tail logs to keep container alive
-log_info "All Hive services are running"
-tail -f "${HIVE_HOME}/logs/metastore.log" "${HIVE_HOME}/logs/hiveserver2.log"
+log_info "All configured Hive services are running"
+if grep -q "<name>hive.server2.enabled</name>.*<value>true</value>" "${HIVE_HOME}/conf/hive-site.xml"; then
+    tail -f "${HIVE_HOME}/logs/metastore.log" "${HIVE_HOME}/logs/hiveserver2.log"
+else
+    tail -f "${HIVE_HOME}/logs/metastore.log"
+fi

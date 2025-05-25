@@ -9,7 +9,7 @@ VALUES_FILE ?= spark-arm/values.yaml
 VERSIONS_SCRIPT ?= versions.sh
 MASTER_POD ?= spark-arm-master-0
 
-.PHONY: build push clean lint deploy undeploy logs build-hive push-hive all port-forward copy-test-files help
+.PHONY: build push clean lint deploy undeploy logs build-hive push-hive all port-forward copy-test-files help upgrade
 
 # Export environment variables from versions.sh
 export-env:
@@ -128,4 +128,40 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "  %-20s %s\n", $$1, $$NF }' $(MAKEFILE_LIST)
+	@echo "  upgrade              Upgrade the Spark cluster using Helm"
+
+# Upgrade the Spark cluster using Helm
+upgrade: export-env lint
+	@echo "Upgrading Spark cluster..."
+	@if [ -f debug.env ]; then \
+		MINIO_ACCESS_KEY=$$(grep AWS_ACCESS_KEY_ID debug.env | cut -d '=' -f2); \
+		MINIO_SECRET_KEY=$$(grep AWS_SECRET_ACCESS_KEY debug.env | cut -d '=' -f2); \
+		MINIO_ENDPOINT=$$(grep AWS_ENDPOINT_URL debug.env | cut -d '=' -f2); \
+		MINIO_BUCKET=$$(grep MINIO_BUCKET debug.env | cut -d '=' -f2); \
+		POSTGRES_HOST=$$(grep POSTGRES_HOST debug.env | cut -d '=' -f2); \
+		POSTGRES_PORT=$$(grep POSTGRES_PORT debug.env | cut -d '=' -f2); \
+		POSTGRES_DB=$$(grep POSTGRES_DB debug.env | cut -d '=' -f2); \
+		POSTGRES_USER=$$(grep POSTGRES_USER debug.env | cut -d '=' -f2); \
+		POSTGRES_PASSWORD=$$(grep POSTGRES_PASSWORD debug.env | cut -d '=' -f2); \
+		TAG=$$(cat tag); \
+		MINIO_ACCESS_KEY=$$MINIO_ACCESS_KEY MINIO_SECRET_KEY=$$MINIO_SECRET_KEY MINIO_ENDPOINT=$$MINIO_ENDPOINT MINIO_BUCKET=$$MINIO_BUCKET POSTGRES_HOST=$$POSTGRES_HOST POSTGRES_PORT=$$POSTGRES_PORT POSTGRES_DB=$$POSTGRES_DB POSTGRES_USER=$$POSTGRES_USER POSTGRES_PASSWORD=$$POSTGRES_PASSWORD \
+		helm upgrade spark-arm spark-arm \
+			--namespace $(NAMESPACE) \
+			--values $(VALUES_FILE) \
+			--set image.tag=$$TAG \
+			--set hive.image.tag=$$TAG \
+			--set hive.metastore.db.host=$${POSTGRES_HOST:-postgresql} \
+			--set hive.metastore.db.port=$${POSTGRES_PORT:-5432} \
+			--set hive.metastore.db.name=$${POSTGRES_DB:-hive} \
+			--set hive.metastore.db.user=$${POSTGRES_USER:-hive} \
+			--set hive.metastore.db.password=$${POSTGRES_PASSWORD:-hive} \
+			--set minio.endpoint=$${MINIO_ENDPOINT:-http://minio:9000} \
+			--set minio.bucket=$${MINIO_BUCKET:-spark-data} \
+			--set minio.credentials.accessKey=$${MINIO_ACCESS_KEY} \
+			--set minio.credentials.secretKey=$${MINIO_SECRET_KEY} \
+			--wait --timeout 5m; \
+	else \
+		echo "Error: debug.env file not found"; \
+		exit 1; \
+	fi
 
