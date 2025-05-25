@@ -6,7 +6,7 @@ get_versions() {
     local SPARK_VERSION="3.5.5"
     local HADOOP_VERSION="3.3.6"
     local DELTA_VERSION="3.3.1"
-    local HIVE_VERSION="4.0.1"
+    local HIVE_VERSION="3.1.3"
     local POSTGRES_VERSION="42.7.3"
     local AWS_SDK_VERSION="1.12.262"
     local SCALA_VERSION="2.13"
