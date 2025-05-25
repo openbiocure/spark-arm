@@ -37,6 +37,8 @@ spec:
           env:
             - name: SPARK_HOME
               value: /opt/spark
+            - name: PATH
+              value: /opt/spark/bin:/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/hive/bin
             - name: SPARK_NODE_TYPE
               value: "master"
             - name: SPARK_LOCAL_HOSTNAME

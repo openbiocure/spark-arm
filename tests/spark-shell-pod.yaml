@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spark-shell-pod
+  namespace: spark
+spec:
+  containers:
+    - name: spark-shell
+      image: ghcr.io/openbiocure/spark-arm:latest
+      stdin: true
+      tty: true
+      command: ["/opt/spark/bin/spark-shell"]
+      args:
+        - --master
+        - spark://spark-arm-master:7077
+        - --driver-memory
+        - 1g
+        - --executor-memory
+        - 1g
+        - --conf
+        - spark.hadoop.fs.s3a.endpoint=$(AWS_ENDPOINT_URL)
+        - --conf
+        - spark.hadoop.fs.s3a.access.key=$(AWS_ACCESS_KEY_ID)
+        - --conf
+        - spark.hadoop.fs.s3a.secret.key=$(AWS_SECRET_ACCESS_KEY)
+        - --conf
+        - spark.hive.metastore.uris=thrift://spark-arm-hive:9083
+        - --conf
+        - spark.driver.extraJavaOptions=-Djline.terminal=jline.UnsupportedTerminal
+      env:
+        - name: AWS_ENDPOINT_URL
+          value: ${AWS_ENDPOINT_URL}
+        - name: AWS_ACCESS_KEY_ID
+          value: ${AWS_ACCESS_KEY_ID}
+        - name: AWS_SECRET_ACCESS_KEY
+          value: ${AWS_SECRET_ACCESS_KEY}
+  restartPolicy: Never

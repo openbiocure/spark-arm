@@ -16,6 +16,8 @@ A production-ready Apache Spark cluster configuration for ARM64 architecture, fe
 - 📦 Helm chart for easy deployment
 - 🔧 Makefile for common tasks
 - ✅ Stable release with verified master-worker connectivity
+- 🐝 Integrated Hive Metastore and HiveServer2 support
+- 🔄 Automated Hive image builds and deployments
 
 ## Current Status
 
@@ -25,6 +27,8 @@ The project is now in a stable state with:
 - Resource cleanup
 - Health monitoring
 - Persistent logging
+- Functional Hive Metastore and HiveServer2 services
+- Integrated Spark-Hive connectivity
 
 ## Prerequisites
 

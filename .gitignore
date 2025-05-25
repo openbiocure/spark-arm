@@ -3,7 +3,7 @@
 .port-forward.pid
 
 # Test files and directories
-tests/
+
 **/target/
 **/metastore_db/
 **/derby.log

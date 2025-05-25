@@ -7,6 +7,9 @@ IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
 VALUES_FILE ?= spark-arm/values.yaml
 VERSIONS_SCRIPT ?= versions.sh
+MASTER_POD ?= spark-arm-master-0
+
+.PHONY: build push clean lint deploy undeploy logs build-hive push-hive all port-forward copy-test-files help
 
 # Export environment variables from versions.sh
 export-env:
@@ -121,27 +124,8 @@ port-forward: export-env
 
 # Show help
 help:
-	@echo "Available commands:"
+	@echo "Usage: make [target]"
 	@echo ""
-	@echo "Build and Verification:"
-	@echo "  make verify-urls      - Verify all download URLs before building"
-	@echo "  make build            - Build the Docker image (includes URL verification)"
-	@echo "  make build-hive       - Build the Hive Docker image (includes URL verification)"
-	@echo "  make push             - Push the Docker image to registry"
-	@echo "  make push-hive        - Push the Hive Docker image to registry"
-	@echo "  make clean            - Clean up build artifacts"
-	@echo ""
-	@echo "Deployment and Management:"
-	@echo "  make deploy           - Deploy the Spark cluster"
-	@echo "  make undeploy         - Undeploy the Spark cluster"
-	@echo "  make all              - Build, push and deploy"
-	@echo ""
-	@echo "Monitoring and Debugging:"
-	@echo "  make logs             - Get logs from Spark pods"
-	@echo "  make port-forward     - Forward Spark master ports (7077, 8080)"
-	@echo ""
-	@echo "Environment:"
-	@echo "  make export-env       - Export environment variables from versions.sh file"
-	@echo ""
-	@echo "For more information, see the README.md file"
+	@echo "Targets:"
+	@awk -F ':|##' '/^[^\t].+?:.*?##/ { printf "  %-20s %s\n", $$1, $$NF }' $(MAKEFILE_LIST)
 

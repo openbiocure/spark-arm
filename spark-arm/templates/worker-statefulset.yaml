@@ -38,6 +38,8 @@ spec:
           env:
             - name: SPARK_HOME
               value: /opt/spark
+            - name: PATH
+              value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/spark/bin
             - name: SPARK_NODE_TYPE
               value: "worker"
             - name: SPARK_LOCAL_HOSTNAME
@@ -148,4 +150,15 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3 
+            failureThreshold: 3
+          env:
+            - name: SPARK_HOME
+              value: /opt/spark
+            - name: PATH
+              value: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/spark/bin
+            - name: HADOOP_HOME
+              value: /opt/hadoop
+            - name: LD_LIBRARY_PATH
+              value: /opt/hadoop/lib/native
+            - name: SPARK_CLASSPATH
+              value: /opt/spark/jars/* 

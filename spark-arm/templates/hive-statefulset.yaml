@@ -56,6 +56,7 @@ spec:
                 - ALL
           env:
             # PostgreSQL Environment Variables
+            # todo: fix this
             - name: POSTGRES_HOST
               value: "172.16.14.112"
             - name: POSTGRES_PORT
