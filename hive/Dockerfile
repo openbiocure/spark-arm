@@ -1,14 +1,10 @@
-# syntax=docker/dockerfile:1.4
-
-# Use the same base image as Spark for consistency
+# Use Eclipse Temurin JDK 17 as base image (supports ARM64)
 FROM eclipse-temurin:17-jdk-jammy
 
-# Define build arguments
-ARG HADOOP_VERSION
+# Define build arguments for versions (must be provided during build)
 ARG HIVE_VERSION
+ARG HADOOP_VERSION
 ARG POSTGRES_VERSION
-ARG POSTGRES_URL_TEMPLATE
-ARG IMAGE_VERSION
 
 # Set environment variables
 ENV HADOOP_HOME=/opt/hadoop \
@@ -21,83 +17,134 @@ ENV HADOOP_HOME=/opt/hadoop \
                   -Djavax.jdo.option.ConnectionUserName=${HIVE_METASTORE_DB_USER:-hive} \
                   -Djavax.jdo.option.ConnectionPassword=${HIVE_METASTORE_DB_PASSWORD:-hive}"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install required packages and create hive user
+RUN apt-get update && apt-get install -y \
     curl \
     procps \
-    postgresql-client \
-    net-tools \
-    netcat-openbsd \
-    openjdk-17-jdk \
-    libpostgresql-jdbc-java \
     gettext \
+    iproute2 \
+    net-tools \
     lsof \
-    coreutils \
-    grep \
-    && rm -rf /var/lib/apt/lists/*
+    nano \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g 1000 hive \
+    && useradd -u 1000 -g hive -m -s /bin/bash hive
 
-# Create necessary directories and set permissions
-RUN mkdir -p ${HADOOP_HOME} ${HIVE_HOME}/conf ${HIVE_HOME}/warehouse ${HIVE_HOME}/scratch \
-    && mkdir -p /opt/hive/logs \
-    && groupadd -r -g 1000 hive \
-    && useradd -r -u 1000 -g hive -d ${HIVE_HOME} -s /bin/bash hive \
-    && echo "hive:x:1000:1000::${HIVE_HOME}:/bin/bash" >> /etc/passwd \
-    && echo "hive:x:1000:" >> /etc/group \
-    && chown -R hive:hive ${HADOOP_HOME} ${HIVE_HOME} \
-    && chown 1000:1000 /opt/hive/logs \
-    && chmod 755 ${HADOOP_HOME} ${HIVE_HOME} \
-    && chmod 777 /opt/hive/logs \
-    && chmod 777 ${HIVE_HOME}/warehouse ${HIVE_HOME}/scratch \
-    && chmod 777 /tmp \
-    && chmod -R 775 ${HIVE_HOME}/conf \
-    && chown -R hive:hive ${HIVE_HOME}/conf \
-    && touch ${HIVE_HOME}/warehouse/.testfile && rm ${HIVE_HOME}/warehouse/.testfile \
-    && echo "Directory permissions verified" \
-    && ls -la ${HIVE_HOME} \
-    && ls -la /opt/hive/logs
+# Create base directories with correct ownership
+RUN mkdir -p /opt && chown hive:hive /opt
 
-# Copy installation scripts
-COPY scripts/logging.sh scripts/install-hadoop.sh scripts/install-hive.sh /tmp/
-RUN chmod +x /tmp/*.sh
-
-# Install Hadoop and Hive
-RUN . /tmp/logging.sh && init_logging && \
-    /tmp/install-hadoop.sh ${HADOOP_VERSION} ${HADOOP_HOME} && \
-    rm -rf ${HIVE_HOME}/lib && \
-    /tmp/install-hive.sh ${HIVE_VERSION} ${HIVE_HOME}
-
-# Create symlink for PostgreSQL JDBC driver after Hive installation and ensure correct ownership
-RUN ln -sf /usr/share/java/postgresql-jdbc4.jar ${HIVE_HOME}/lib/postgresql.jar \
-    && chown -h hive:hive ${HIVE_HOME}/lib/postgresql.jar \
-    && chmod 644 ${HIVE_HOME}/lib/postgresql.jar
-
-# Copy configuration files
-COPY conf/hive-site.xml.template ${HIVE_HOME}/conf/
-COPY conf/hive-log4j2.properties.template ${HIVE_HOME}/conf/hive-log4j2.properties
-COPY conf/core-site.xml ${HADOOP_HOME}/etc/hadoop/
-COPY conf/hdfs-site.xml ${HADOOP_HOME}/etc/hadoop/
-RUN chown -R hive:hive ${HIVE_HOME}/conf ${HADOOP_HOME}/etc/hadoop \
-    && chmod -R 775 ${HIVE_HOME}/conf ${HADOOP_HOME}/etc/hadoop \
-    && chmod 644 ${HIVE_HOME}/conf/hive-log4j2.properties \
-    && echo "Log4j2 configuration copied and permissions set" \
-    && ls -la ${HIVE_HOME}/conf/hive-site.xml.template
-
-# Create hive-env.sh with driver configuration
-RUN echo "export HIVE_AUX_JARS_PATH=${HIVE_HOME}/lib/postgresql.jar" > ${HIVE_HOME}/conf/hive-env.sh && \
-    echo "export HADOOP_CLASSPATH=${HIVE_HOME}/lib/postgresql.jar:\${HADOOP_CLASSPATH:-}" >> ${HIVE_HOME}/conf/hive-env.sh && \
-    chown hive:hive ${HIVE_HOME}/conf/hive-env.sh
-
-# Copy startup scripts and logging
-COPY scripts/start-hive.sh scripts/logging.sh ${HIVE_HOME}/bin/
-RUN chmod +x ${HIVE_HOME}/bin/*.sh \
-    && chown hive:hive ${HIVE_HOME}/bin/*.sh
-
-# Set working directory and ensure it's writable
-WORKDIR ${HIVE_HOME}
-RUN chown hive:hive ${HIVE_HOME} && chmod 755 ${HIVE_HOME}
-
-# Use hive user
+# Switch to hive user for remaining operations
 USER hive
 
-# Default command
-CMD ["/opt/hive/bin/start-hive.sh"] 
+# Create Hive and Hadoop directories with correct permissions
+# Only create and set permissions for directories that need specific access
+RUN mkdir -p $HIVE_HOME && \
+    mkdir -p $HADOOP_HOME && \
+    mkdir -p $HIVE_HOME/conf && \
+    mkdir -p $HIVE_HOME/scripts && \
+    mkdir -p $HIVE_HOME/warehouse && \
+    mkdir -p $HIVE_HOME/scratch && \
+    mkdir -p $HIVE_HOME/logs && \
+    mkdir -p $HIVE_HOME/tmp && \
+    mkdir -p $HIVE_HOME/bin && \
+    mkdir -p $HIVE_HOME/lib && \
+    chmod 755 $HIVE_HOME && \
+    chmod 755 $HADOOP_HOME && \
+    chmod 755 $HIVE_HOME/conf && \
+    chmod 755 $HIVE_HOME/scripts && \
+    chmod 755 $HIVE_HOME/bin && \
+    chmod 755 $HIVE_HOME/lib && \
+    chmod 750 $HIVE_HOME/warehouse && \
+    chmod 750 $HIVE_HOME/scratch && \
+    chmod 750 $HIVE_HOME/logs && \
+    chmod 750 $HIVE_HOME/tmp
+
+# Switch back to root to copy installation scripts
+USER root
+
+# Copy all scripts to their permanent location
+COPY --chown=hive:hive scripts/logging.sh $HIVE_HOME/scripts/
+COPY --chown=hive:hive scripts/metastore-check.sh $HIVE_HOME/scripts/
+COPY --chown=hive:hive scripts/install-hadoop.sh $HIVE_HOME/scripts/
+RUN chmod +x $HIVE_HOME/scripts/metastore-check.sh $HIVE_HOME/scripts/install-hadoop.sh
+
+# Switch back to hive user for installation
+USER hive
+
+# Install Hadoop using the script
+RUN $HIVE_HOME/scripts/install-hadoop.sh ${HADOOP_VERSION} ${HADOOP_HOME}
+
+# Download and extract Hive (as hive user)
+RUN curl -L https://dlcdn.apache.org/hive/hive-standalone-metastore-${HIVE_VERSION}/hive-standalone-metastore-${HIVE_VERSION}-bin.tar.gz | \
+    tar xz -C /opt/ && \
+    # Move everything except scripts directory first
+    find /opt/apache-hive-metastore-${HIVE_VERSION}-bin -mindepth 1 -maxdepth 1 -not -name scripts -exec mv {} $HIVE_HOME/ \; && \
+    # Move Hive's scripts to a subdirectory
+    mv /opt/apache-hive-metastore-${HIVE_VERSION}-bin/scripts $HIVE_HOME/scripts/metastore && \
+    rm -rf /opt/apache-hive-metastore-${HIVE_VERSION}-bin && \
+    # Download standalone metastore JAR
+    curl -L https://repo1.maven.org/maven2/org/apache/hive/hive-standalone-metastore/${HIVE_VERSION}/hive-standalone-metastore-${HIVE_VERSION}.jar \
+        -o $HIVE_HOME/lib/hive-standalone-metastore-${HIVE_VERSION}.jar && \
+    # Verify and set permissions for Hive binaries
+    if [ -f "$HIVE_HOME/bin/metastore-config.sh" ]; then \
+        chmod 755 $HIVE_HOME/bin/metastore-config.sh; \
+    else \
+        echo "Warning: metastore-config.sh not found at $HIVE_HOME/bin/metastore-config.sh"; \
+        ls -la $HIVE_HOME/bin/; \
+    fi && \
+    if [ -f "$HIVE_HOME/bin/schematool" ]; then \
+        chmod 755 $HIVE_HOME/bin/schematool; \
+    else \
+        echo "Warning: schematool not found at $HIVE_HOME/bin/schematool"; \
+        ls -la $HIVE_HOME/bin/; \
+    fi && \
+    if [ -f "$HIVE_HOME/bin/start-metastore" ]; then \
+        chmod 755 $HIVE_HOME/bin/start-metastore; \
+    else \
+        echo "Warning: start-metastore not found at $HIVE_HOME/bin/start-metastore"; \
+        ls -la $HIVE_HOME/bin/; \
+    fi && \
+    # Verify metastore JAR exists
+    if [ ! -f "$HIVE_HOME/lib/hive-standalone-metastore-${HIVE_VERSION}.jar" ]; then \
+        echo "Error: hive-standalone-metastore-${HIVE_VERSION}.jar not found in $HIVE_HOME/lib/"; \
+        echo "Contents of $HIVE_HOME/lib/:"; \
+        ls -la $HIVE_HOME/lib/; \
+        exit 1; \
+    fi && \
+    # List all JARs for verification
+    echo "Contents of $HIVE_HOME/lib/:" && \
+    ls -la $HIVE_HOME/lib/
+
+# Download PostgreSQL JDBC driver
+RUN curl -L https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRES_VERSION}/postgresql-${POSTGRES_VERSION}.jar \
+    -o $HIVE_HOME/lib/postgresql-${POSTGRES_VERSION}.jar
+
+# Switch back to root to copy files
+USER root
+
+# Copy configuration files with correct permissions
+COPY --chown=hive:hive conf/hive-site.xml.template $HIVE_HOME/conf/hive-site.xml.template
+COPY --chown=hive:hive conf/logging/log4j.properties $HIVE_HOME/conf/
+COPY --chown=hive:hive conf/logging/log4j2.xml $HIVE_HOME/conf/
+COPY --chown=hive:hive conf/core-site.xml $HIVE_HOME/conf/
+COPY --chown=hive:hive conf/hdfs-site.xml $HIVE_HOME/conf/
+
+# Copy and prepare entrypoint script
+COPY --chown=hive:hive scripts/entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh && \
+    # Ensure script has Unix line endings
+    sed -i 's/\r$//' /entrypoint.sh && \
+    # Verify script is executable and has correct shebang
+    head -n 1 /entrypoint.sh | grep -q '^#!/bin/bash' || (echo "Invalid shebang in entrypoint.sh" && exit 1)
+
+# Switch back to hive user
+USER hive
+
+# Expose metastore port
+EXPOSE 9083
+
+# Add healthcheck
+HEALTHCHECK CMD bash -c '</dev/tcp/localhost/9083' || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/entrypoint.sh"] 

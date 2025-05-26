@@ -1,7 +1,6 @@
 # Variables
 REGISTRY ?= ghcr.io
 IMAGE_NAME ?= $(REGISTRY)/openbiocure/spark-arm
-HIVE_IMAGE_NAME ?= $(REGISTRY)/openbiocure/hive-arm
 VERSION := $(shell cat tag)
 IMAGE_TAG ?= $(VERSION)
 NAMESPACE ?= spark
@@ -9,7 +8,7 @@ VALUES_FILE ?= spark-arm/values.yaml
 VERSIONS_SCRIPT ?= versions.sh
 MASTER_POD ?= spark-arm-master-0
 
-.PHONY: build push clean lint deploy undeploy logs build-hive push-hive all port-forward copy-test-files help upgrade
+.PHONY: build push clean lint deploy undeploy logs all port-forward copy-test-files help upgrade
 
 # Export environment variables from versions.sh
 export-env:
@@ -93,24 +92,6 @@ undeploy:
 # Get logs from Spark pods
 logs:
 	kubectl logs -f -l app.kubernetes.io/name=spark-arm -n $(NAMESPACE)
-
-# Build the Hive Docker image
-build-hive: verify-urls
-	@echo "Building Hive Docker image..."
-	@TAG=$$(cat tag); \
-	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | grep -v '^#' | grep -v '^$$' | tr '\n' ' ' | sed 's/^ *//;s/ *$$//' | awk '{for(i=1;i<=NF;i++) printf "--build-arg %s ", $$i}'); \
-	BUILD_CMD="docker build --platform linux/arm64 -t hive-arm:$$TAG $$BUILD_ARGS --build-arg IMAGE_VERSION=$$TAG -f hive/Dockerfile hive"; \
-	echo "Debug: Build command: $$BUILD_CMD"; \
-	eval "$$BUILD_CMD"; \
-	docker tag hive-arm:$$TAG $(HIVE_IMAGE_NAME):$(IMAGE_TAG); \
-	docker tag hive-arm:$$TAG $(HIVE_IMAGE_NAME):latest
-
-# Push the Hive Docker image to registry
-push-hive:
-	docker tag $(HIVE_IMAGE_NAME):$(IMAGE_TAG) $(HIVE_IMAGE_NAME):stable
-	docker push $(HIVE_IMAGE_NAME):$(IMAGE_TAG)
-	docker push $(HIVE_IMAGE_NAME):latest
-	docker push $(HIVE_IMAGE_NAME):stable
 
 # Build, push and deploy
 all: build push deploy

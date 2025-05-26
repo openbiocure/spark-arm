@@ -1,60 +1,72 @@
 #!/bin/bash
 
-# Logging functions for Hive scripts
-# Usage: source /opt/hive/bin/logging.sh
+# Define colors
+declare -A COLORS=(
+    [RESET]="\033[0m"
+    [RED]="\033[31m"
+    [GREEN]="\033[32m"
+    [YELLOW]="\033[33m"
+    [BLUE]="\033[34m"
+    [MAGENTA]="\033[35m"
+    [CYAN]="\033[36m"
+    [WHITE]="\033[37m"
+    [BOLD]="\033[1m"
+)
+
+# Define log levels with their colors
+declare -A LOG_LEVELS=(
+    [DEBUG]=0
+    [INFO]=1
+    [WARN]=2
+    [ERROR]=3
+)
+
+declare -A LOG_COLORS=(
+    [DEBUG]="${COLORS[CYAN]}"
+    [INFO]="${COLORS[GREEN]}"
+    [WARN]="${COLORS[YELLOW]}"
+    [ERROR]="${COLORS[RED]}${COLORS[BOLD]}"
+)
 
 # Initialize logging
 init_logging() {
-    # Determine if we're in installation mode or runtime mode
-    if [ -f "/tmp/install-hadoop.sh" ]; then
-        # Installation mode - use /tmp
-        export LOG_FILE="/tmp/hive-install.log"
-    else
-        # Runtime mode - use Hive logs directory
-        export LOG_FILE="${HIVE_HOME}/logs/hive.log"
-    fi
-
-    # Remove existing log file if it exists as we don't have write permission
-    if [ -f "$LOG_FILE" ] && [ ! -w "$LOG_FILE" ]; then
-        rm -f "$LOG_FILE"
-    fi
-
-    # Create log file with proper permissions
-    touch "$LOG_FILE" 2>/dev/null || true
-    chmod 666 "$LOG_FILE" 2>/dev/null || true
-}
-
-# Log levels
-log_info() {
-    if [ -w "$LOG_FILE" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1" | tee -a "$LOG_FILE"
-    else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $1"
-    fi
-}
-
-log_warn() {
-    if [ -w "$LOG_FILE" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1" | tee -a "$LOG_FILE"
-    else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN] $1"
-    fi
-}
-
-log_error() {
-    if [ -w "$LOG_FILE" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1" | tee -a "$LOG_FILE"
-    else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1"
-    fi
-}
-
-# Error handler
-handle_error() {
-    local script=$1
-    local line=$2
-    local exit_code=$3
+    # Set default log level if not set
+    : "${LOG_LEVEL:=INFO}"
     
-    log_error "Error in $script at line $line (exit code: $exit_code)"
-    exit "$exit_code"
-} 
+    # Get numeric value for current log level
+    CURRENT_LEVEL=${LOG_LEVELS[$LOG_LEVEL]:-1}
+}
+
+# Log a message with timestamp and level
+log() {
+    local level=$1
+    shift
+    local message="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local color=${LOG_COLORS[$level]:-${COLORS[RESET]}}
+    
+    # Get numeric value for message level
+    local level_num=${LOG_LEVELS[$level]:-1}
+    
+    # Only log if message level is >= current level
+    if [ $level_num -ge $CURRENT_LEVEL ]; then
+        # Use printf for better formatting and color support
+        if [ -t 1 ]; then
+            # If stdout is a terminal, use colors
+            printf "%b[%s] %s%s: %s%b\n" \
+                "${COLORS[WHITE]}" "$timestamp" \
+                "$color" "$level" \
+                "${COLORS[RESET]}" "$message" \
+                "${COLORS[RESET]}"
+        else
+            # If stdout is not a terminal (e.g., being piped), don't use colors
+            printf "[%s] %s: %s\n" "$timestamp" "$level" "$message"
+        fi
+    fi
+}
+
+# Log functions for different levels
+log_debug() { log "DEBUG" "$*"; }
+log_info() { log "INFO" "$*"; }
+log_warn() { log "WARN" "$*"; }
+log_error() { log "ERROR" "$*" >&2; } 

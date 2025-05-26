@@ -1,4 +1,9 @@
-.PHONY: shell run attach-shell kill-shell clean
+.PHONY: shell run attach-shell kill-shell clean test-hive stop-test-hive
+
+# Variables
+HIVE_IMAGE_NAME ?= ghcr.io/openbiocure/hive-arm
+HIVE_CONTAINER_NAME ?= hive-test
+HIVE_VERSION ?= $(shell cat ../tag)
 
 # Load environment variables
 include ../debug.env
@@ -54,9 +59,3 @@ kill-shell:
 	@echo "Killing spark-shell pod..."
 	@kubectl delete pod spark-shell-pod -n spark 2>/dev/null || \
 		(echo "No spark-shell pod found." && exit 0)
-
-# Clean up everything
-clean:
-	@echo "Cleaning up spark-shell pod..."
-	@kubectl delete pod spark-shell-pod -n spark 2>/dev/null || true
-	@echo "Cleanup complete." 

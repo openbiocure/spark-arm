@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Source the logging library
-source /tmp/logging.sh
+source $HIVE_HOME/scripts/logging.sh
 
 # Initialize logging
 init_logging

@@ -66,8 +66,8 @@
     <!-- Hive Metastore Configuration -->
     <property>
         <name>hive.metastore.uris</name>
-        <value>${HIVE_METASTORE_URI}</value>
-        <description>Thrift URI for the remote metastore</description>
+        <value>${HIVE_METASTORE_URI:-thrift://localhost:9083}</value>
+        <description>Thrift URI for the remote metastore. Used by metastore client to connect to remote metastore.</description>
     </property>
     <property>
         <name>hive.metastore.schema.verification</name>
