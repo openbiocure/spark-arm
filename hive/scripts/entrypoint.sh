@@ -9,7 +9,7 @@ source $HIVE_HOME/scripts/metastore-check.sh
 init_logging
 
 # Script Version
-log_info "Script Version: 1.2.0"
+log_info "Script Version: 1.3.0"
 
 # Verify Hadoop installation
 log_info "Verifying Hadoop installation:"
