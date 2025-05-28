@@ -11,6 +11,7 @@ ARG HADOOP_URL_TEMPLATE
 ARG DELTA_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
+ARG HADOOP_AWS_URL_TEMPLATE
 
 # Stage 1: URL verification (lightweight)
 FROM eclipse-temurin:17-jdk-jammy AS url-verifier
@@ -20,6 +21,7 @@ RUN mkdir -p /opt/spark/scripts
 # Copy only the scripts needed for verification
 COPY docker/scripts/logging.sh /opt/spark/scripts/
 COPY docker/scripts/verify-urls.sh docker/scripts/install-verifier-deps.sh /tmp/
+COPY versions.sh /opt/spark/scripts/
 RUN chmod +x /tmp/*.sh /opt/spark/scripts/*.sh
 
 # Set version environment variables for verification
@@ -33,6 +35,7 @@ ARG HADOOP_URL_TEMPLATE
 ARG DELTA_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
+ARG HADOOP_AWS_URL_TEMPLATE
 
 # Export all variables to environment
 ENV SPARK_VERSION="${SPARK_VERSION}" \
@@ -44,7 +47,8 @@ ENV SPARK_VERSION="${SPARK_VERSION}" \
     HADOOP_URL_TEMPLATE="${HADOOP_URL_TEMPLATE}" \
     DELTA_URL_TEMPLATE="${DELTA_URL_TEMPLATE}" \
     AWS_BUNDLE_URL_TEMPLATE="${AWS_BUNDLE_URL_TEMPLATE}" \
-    AWS_S3_URL_TEMPLATE="${AWS_S3_URL_TEMPLATE}"
+    AWS_S3_URL_TEMPLATE="${AWS_S3_URL_TEMPLATE}" \
+    HADOOP_AWS_URL_TEMPLATE="${HADOOP_AWS_URL_TEMPLATE}"
 
 # Debug output for environment variables
 RUN echo "Debug: Environment variables in url-verifier stage:"
@@ -88,6 +92,7 @@ COPY --from=hadoop-builder /opt/hadoop/lib/native ${HADOOP_HOME}/lib/native/
 
 # Copy all scripts
 COPY docker/scripts/ ${SPARK_HOME}/scripts/
+COPY versions.sh ${SPARK_HOME}/scripts/
 RUN chmod +x ${SPARK_HOME}/scripts/*.sh
 
 # Set version environment variables
@@ -101,6 +106,7 @@ ARG HADOOP_URL_TEMPLATE
 ARG DELTA_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
+ARG HADOOP_AWS_URL_TEMPLATE
 
 ENV SPARK_VERSION=${SPARK_VERSION} \
     HADOOP_VERSION=${HADOOP_VERSION} \
@@ -111,7 +117,8 @@ ENV SPARK_VERSION=${SPARK_VERSION} \
     HADOOP_URL_TEMPLATE=${HADOOP_URL_TEMPLATE} \
     DELTA_URL_TEMPLATE=${DELTA_URL_TEMPLATE} \
     AWS_BUNDLE_URL_TEMPLATE=${AWS_BUNDLE_URL_TEMPLATE} \
-    AWS_S3_URL_TEMPLATE=${AWS_S3_URL_TEMPLATE}
+    AWS_S3_URL_TEMPLATE=${AWS_S3_URL_TEMPLATE} \
+    HADOOP_AWS_URL_TEMPLATE=${HADOOP_AWS_URL_TEMPLATE}
 
 # Install system dependencies and create user
 RUN --mount=type=cache,target=/var/cache/apt \
@@ -124,34 +131,47 @@ RUN --mount=type=cache,target=/var/cache/apt \
         tini \
         coreutils \
         bash \
+        net-tools \
+        iproute2 \
+        dnsutils \
+        htop \
+        vim-tiny \
+        less \
         && rm -rf /var/lib/apt/lists/* && \
-    # Create user and directories
+    # Create user and directories with home directory
     groupadd -r spark && \
-    useradd -r -g spark spark && \
+    useradd -r -m -g spark spark && \
     # Create directories with proper permissions
-    mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs && \
-    # Set ownership of directories
-    chown -R spark:spark ${SPARK_HOME} ${HADOOP_HOME} && \
-    # Set permissions for log directories
-    chmod 777 ${SPARK_HOME}/logs && \
+    mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs ${SPARK_HOME}/tmp && \
+    # Set ownership of all directories
+    chown -R spark:spark ${SPARK_HOME} ${HADOOP_HOME} /home/spark && \
+    # Set permissions for directories
+    chmod 755 ${SPARK_HOME} ${HADOOP_HOME} /home/spark && \
+    chmod 777 ${SPARK_HOME}/logs ${SPARK_HOME}/tmp && \
     # Ensure spark user has access to essential commands
     chmod -R 755 /usr/bin/bash /usr/bin/date /usr/bin/mkdir && \
+    # Ensure spark user can write to /opt/spark
+    chown -R spark:spark /opt/spark && \
+    chmod -R 755 /opt/spark && \
     # Verify essential commands are available and accessible
     su - spark -c "which bash" && \
     su - spark -c "which date" && \
     su - spark -c "which mkdir" && \
-    # Verify log directories are accessible
-    su - spark -c "test -w ${SPARK_HOME}/logs"
+    # Verify directories are accessible
+    su - spark -c "test -w ${SPARK_HOME}/logs" && \
+    su - spark -c "test -w ${SPARK_HOME}/tmp" && \
+    su - spark -c "test -w /opt/spark"
 
-# Download and install Spark
+# Download and install Spark as spark user
+USER spark
 RUN --mount=type=cache,target=/tmp/downloads \
-    ${SPARK_HOME}/scripts/download-spark.sh ${SPARK_VERSION} ${SPARK_HOME}
+    ${SPARK_HOME}/scripts/download-spark.sh ${SPARK_HOME}
 
-# Download all required JARs in parallel
+# Download all required JARs in parallel as spark user
 RUN --mount=type=cache,target=/tmp/downloads \
     ${SPARK_HOME}/scripts/download-jars.sh
 
-# Create spark-defaults.conf
+# Create spark-defaults.conf as spark user
 RUN ${SPARK_HOME}/scripts/create-spark-defaults.sh
 
 # Set working directory
@@ -160,5 +180,5 @@ WORKDIR ${SPARK_HOME}
 # Use tini as init process
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Default command
+# Default command (will run as spark user)
 CMD ["/opt/spark/scripts/start-spark.sh"] 

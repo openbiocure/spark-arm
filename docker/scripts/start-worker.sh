@@ -24,6 +24,17 @@ start_spark_worker() {
     export SPARK_WORKER_CORES=${SPARK_WORKER_CORES:-"1"}
     export SPARK_WORKER_MEMORY=${SPARK_WORKER_MEMORY:-"1g"}
     export SPARK_WORKER_WEBUI_PORT=${SPARK_WORKER_WEBUI_PORT:-"8081"}
+    export SPARK_WORKER_PORT=${SPARK_WORKER_PORT:-"8081"}
+    export SPARK_LOCAL_DIRS=${SPARK_LOCAL_DIRS:-"/opt/spark/tmp"}
+
+    if [[ -f /var/run/secrets/kubernetes.io/serviceaccount/token ]]; then
+    # We are inside Kubernetes
+        export SPARK_WORKER_HOST=${SPARK_WORKER_HOST:-$(hostname -f)}
+    else
+        # We are running locally
+        export SPARK_WORKER_HOST=${SPARK_WORKER_HOST:-$(hostname -i | awk '{print $1}')}
+    fi
+
     
     log_info "Master URL: ${SPARK_MASTER_URL}"
     log_info "Worker cores: ${SPARK_WORKER_CORES}"
@@ -31,10 +42,15 @@ start_spark_worker() {
     log_info "Worker WebUI port: ${SPARK_WORKER_WEBUI_PORT}"
     
     # Start the worker
-    exec ${SPARK_HOME}/sbin/start-worker.sh \
-        --webui-port ${SPARK_WORKER_WEBUI_PORT} \
-        --cores ${SPARK_WORKER_CORES} \
-        --memory ${SPARK_WORKER_MEMORY} \
+    exec "${JAVA_HOME:-/opt/java/openjdk}/bin/java" \
+        -cp "${SPARK_HOME}/conf/:${SPARK_HOME}/jars/*" \
+        -Xmx1g \
+        org.apache.spark.deploy.worker.Worker \
+        --host "${SPARK_WORKER_HOST}" \
+        --port "${SPARK_WORKER_PORT}" \
+        --webui-port "${SPARK_WORKER_WEBUI_PORT}" \
+        --cores "${SPARK_WORKER_CORES}" \
+        --memory "${SPARK_WORKER_MEMORY}" \
         "${SPARK_MASTER_URL}"
 }
 

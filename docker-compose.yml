@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  spark-master:
+    image: ${SPARK_IMAGE_NAME:-ghcr.io/openbiocure/spark-arm}:${TAG:-v0.6.2}
+    platform: linux/arm64
+    container_name: spark-test
+    hostname: spark-test
+    user: "spark:spark"  # Run as spark user
+    env_file:
+      - debug.env
+    ports:
+      - "7077:7077"  # Spark master
+      - "8080:8080"  # Spark master web UI
+    environment:
+      - SPARK_NODE_TYPE=master
+      - SPARK_MASTER_HOST=spark-test
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+    volumes:
+      - ./logs:/opt/spark/logs
+      - ./master-tmp:/opt/spark/tmp
+      - ./master-work:/opt/spark/work
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-test", "--port", "7077", "--webui-port", "8080"]
+    networks:
+      - spark-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  spark-worker:
+    image: ${SPARK_IMAGE_NAME:-ghcr.io/openbiocure/spark-arm}:${TAG:-v0.6.2}
+    platform: linux/arm64
+    container_name: spark-test-worker
+    hostname: spark-test-worker
+    user: "spark:spark"  # Run as spark user
+    env_file:
+      - debug.env
+    ports:
+      - "8082:8082"  # Spark worker web UI
+    environment:
+      - SPARK_NODE_TYPE=worker
+      - SPARK_MASTER_URL=spark://spark-test:7077
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_LOCAL_DIRS=/opt/spark/tmp
+      - SPARK_WORKER_DIR=/opt/spark/tmp
+      - SPARK_DRIVER_DIR=/opt/spark/tmp
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    volumes:
+      - ./worker-logs:/opt/spark/logs
+      - ./worker-tmp:/opt/spark/tmp
+      - ./worker-work:/opt/spark/work
+    networks:
+      - spark-net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep -q 'org.apache.spark.deploy.worker.Worker'"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+        reservations:
+          memory: 512M
+
+  spark-client:
+    image: ${SPARK_IMAGE_NAME:-ghcr.io/openbiocure/spark-arm}:${TAG:-v0.6.2}
+    platform: linux/arm64
+    container_name: spark-test-client
+    hostname: spark-test-client
+    user: "spark:spark"  # Run as spark user
+    env_file:
+      - debug.env
+    environment:
+      - SPARK_MASTER_URL=spark://spark-test:7077
+      - SPARK_MASTER=spark://spark-test:7077
+      - SPARK_HOME=/opt/spark
+      - SPARK_CLASSPATH=/opt/spark/jars/*
+      - SPARK_BUILD_DIR=/opt/spark
+      - SPARK_SCALA_VERSION=2.13
+      - SPARK_LOCAL_DIRS=/opt/spark/tmp
+      - SPARK_WORKER_DIR=/opt/spark/tmp
+      - SPARK_DRIVER_DIR=/opt/spark/tmp
+    volumes:
+      - .:/opt/spark/work
+      - ./client-tmp:/opt/spark/tmp
+      - ./client-work:/opt/spark/work
+      - /opt/spark/jars:/opt/spark/jars:ro
+      - /opt/spark/conf:/opt/spark/conf:ro
+    networks:
+      - spark-net
+    depends_on:
+      spark-master:
+        condition: service_healthy
+      spark-worker:
+        condition: service_healthy
+    command: /bin/bash
+    stdin_open: true
+    tty: true
+
+networks:
+  spark-net:
+    name: spark-net
+    driver: bridge
+
+volumes:
+  master-tmp:
+  worker-tmp:
+  client-tmp:
+  master-work:
+  worker-work:
+  client-work: 

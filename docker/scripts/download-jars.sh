@@ -63,6 +63,7 @@ download_all_jars() {
         "${DELTA_URL_TEMPLATE}"
         "${AWS_BUNDLE_URL_TEMPLATE}"
         "${AWS_S3_URL_TEMPLATE}"
+        "${HADOOP_AWS_URL_TEMPLATE}"
     )
     
     # Download JARs in parallel

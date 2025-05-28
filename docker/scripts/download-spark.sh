@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Source the versions file
+source /opt/spark/scripts/versions.sh
+
 # Source the logging library
 source /opt/spark/scripts/logging.sh
 
@@ -22,58 +25,74 @@ verify_url() {
 
 # Function to download and install Spark
 download_and_install_spark() {
-    local spark_version=$1
-    local spark_home=$2
+    local spark_home=$1
     local max_attempts=3
     local attempt=1
     
-    log_info "Starting Spark download process for version ${spark_version}"
+    # Use SPARK_VERSION from environment variable
+    if [ -z "${SPARK_VERSION:-}" ]; then
+        log_error "SPARK_VERSION environment variable is not set"
+        return 1
+    fi
     
-    # Construct the download URL
-    local spark_url="https://dlcdn.apache.org/spark/spark-${spark_version}/spark-${spark_version}-bin-hadoop3-scala2.13.tgz"
+    log_info "Starting Spark download process for version ${SPARK_VERSION}"
+    
+    # Use SPARK_URL_TEMPLATE from environment variable
+    if [ -z "${SPARK_URL_TEMPLATE:-}" ]; then
+        log_error "SPARK_URL_TEMPLATE environment variable is not set"
+        return 1
+    fi
     
     # Verify URL exists before attempting download
-    if ! verify_url "$spark_url"; then
-        log_error "Spark version ${spark_version} is not available at the expected URL"
+    if ! verify_url "$SPARK_URL_TEMPLATE"; then
+        log_error "Spark version ${SPARK_VERSION} is not available at the expected URL"
         return 1
     fi
     
     while [ $attempt -le $max_attempts ]; do
         log_info "Attempt ${attempt} of ${max_attempts} to download Spark..."
         
+        # Create a temporary directory in the user's home directory
+        local temp_dir="${HOME}/spark-extract"
+        mkdir -p "$temp_dir"
+        chmod 700 "$temp_dir"
+        
         if curl -fSL --retry 3 --retry-delay 5 \
-            "$spark_url" \
-            -o /tmp/spark.tgz; then
+            "$SPARK_URL_TEMPLATE" \
+            -o "${temp_dir}/spark.tgz"; then
             
             log_info "Download successful"
             
             # Verify download
             log_info "Verifying download..."
-            local file_size=$(stat -f%z /tmp/spark.tgz 2>/dev/null || stat -c%s /tmp/spark.tgz 2>/dev/null)
+            local file_size=$(stat -f%z "${temp_dir}/spark.tgz" 2>/dev/null || stat -c%s "${temp_dir}/spark.tgz" 2>/dev/null)
             log_info "Downloaded file size: ${file_size} bytes"
             
             if [ "$file_size" -lt 1000000 ]; then
                 log_error "Downloaded file seems too small (${file_size} bytes)"
-                rm -f /tmp/spark.tgz
+                rm -f "${temp_dir}/spark.tgz"
                 attempt=$((attempt + 1))
                 continue
             fi
             
-            # Extract and install
-            log_info "Extracting Spark archive..."
-            tar -xf /tmp/spark.tgz -C /opt
+            # Extract to temporary directory
+            log_info "Extracting Spark archive to temporary directory..."
+            cd "$temp_dir" && tar -xf spark.tgz
             
+            # Move files to final location
             log_info "Moving files to ${spark_home}..."
-            mv /opt/spark-${spark_version}-bin-hadoop3-scala2.13/* "${spark_home}"
+            mv "spark-${SPARK_VERSION}-bin-hadoop3-scala${SCALA_VERSION}"/* "${spark_home}/"
             
+            # Clean up
             log_info "Cleaning up..."
-            rm -rf /tmp/spark.tgz /opt/spark-${spark_version}-bin-hadoop3-scala2.13
+            cd - > /dev/null
+            rm -rf "$temp_dir"
             
             log_info "Spark installation completed successfully"
             return 0
         else
             log_error "Download failed on attempt ${attempt}"
-            rm -f /tmp/spark.tgz
+            rm -f "${temp_dir}/spark.tgz"
             
             if [ $attempt -eq $max_attempts ]; then
                 log_error "All download attempts failed"
@@ -91,10 +110,10 @@ download_and_install_spark() {
 
 # Main execution
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    if [ "$#" -ne 2 ]; then
-        echo "Usage: $0 <spark_version> <spark_home>"
+    if [ "$#" -ne 1 ]; then
+        echo "Usage: $0 <spark_home>"
         exit 1
     fi
     
-    download_and_install_spark "$1" "$2"
+    download_and_install_spark "$1"
 fi 

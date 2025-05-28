@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+
+🧱 General Structure
+	1.	Always prefer multi-stage builds for smaller image sizes.
+	2.	Base images must be explicitly versioned (e.g., node:18-alpine, not node:latest).
+	3.	Final image should be as small as possible using Alpine or distroless images where applicable.
+	4.	Use .dockerignore to exclude unnecessary files and speed up build context.
