@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Never issue a docker command on my local machine as am using a mac if you want to issue commands let me know and ill issue them on the Raspberry pi

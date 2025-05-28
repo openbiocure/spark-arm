@@ -84,7 +84,9 @@ ENV SPARK_HOME=/opt/spark \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/spark/bin \
     HADOOP_HOME=/opt/hadoop \
     LD_LIBRARY_PATH=/opt/hadoop/lib/native \
-    SPARK_CLASSPATH=/opt/spark/jars/*
+    SPARK_CLASSPATH=/opt/spark/jars/* \
+    SPARK_BUILD_DIR=/opt/spark \
+    SPARK_EXECUTOR_BUILD_DIR=/opt/spark
 
 # Copy verification marker and native libraries
 COPY --from=url-verifier /tmp/urls-verified /tmp/
@@ -147,7 +149,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
     chown -R spark:spark ${SPARK_HOME} ${HADOOP_HOME} /home/spark && \
     # Set permissions for directories
     chmod 755 ${SPARK_HOME} ${HADOOP_HOME} /home/spark && \
-    chmod 777 ${SPARK_HOME}/logs ${SPARK_HOME}/tmp && \
     # Ensure spark user has access to essential commands
     chmod -R 755 /usr/bin/bash /usr/bin/date /usr/bin/mkdir && \
     # Ensure spark user can write to /opt/spark
@@ -166,6 +167,15 @@ RUN --mount=type=cache,target=/var/cache/apt \
 USER spark
 RUN --mount=type=cache,target=/tmp/downloads \
     ${SPARK_HOME}/scripts/download-spark.sh ${SPARK_HOME}
+
+# Copy and set up log4j2.xml as root
+USER root
+COPY log4j2.xml ${SPARK_HOME}/conf/
+RUN chown spark:spark ${SPARK_HOME}/conf/log4j2.xml && \
+    chmod 644 ${SPARK_HOME}/conf/log4j2.xml
+
+# Switch back to spark user for remaining operations
+USER spark
 
 # Download all required JARs in parallel as spark user
 RUN --mount=type=cache,target=/tmp/downloads \

@@ -49,6 +49,18 @@ services:
       - SPARK_LOCAL_DIRS=/opt/spark/tmp
       - SPARK_WORKER_DIR=/opt/spark/tmp
       - SPARK_DRIVER_DIR=/opt/spark/tmp
+      - SPARK_HOME=/opt/spark
+      - SPARK_CLASSPATH=/opt/spark/jars/*
+      - SPARK_SQL_CATALOG_IMPLEMENTATION=hive
+      - SPARK_JDBC_DRIVER=org.postgresql.Driver
+      - SPARK_JDBC_URL=jdbc:postgresql://172.16.14.112:5432/hive
+      - SPARK_JDBC_USER=hive
+      - SPARK_JDBC_PASSWORD=hive
+      - SPARK_DIST_CLASSPATH=/opt/spark/jars/*
+      - SPARK_RESOURCES_DIR=/opt/spark
+      - SPARK_CONF_DIR=/opt/spark/conf
+      - SPARK_BUILD_DIR=/opt/spark
+      - SPARK_EXECUTOR_BUILD_DIR=/opt/spark
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
@@ -56,6 +68,7 @@ services:
       - ./worker-logs:/opt/spark/logs
       - ./worker-tmp:/opt/spark/tmp
       - ./worker-work:/opt/spark/work
+    command: /opt/spark/scripts/start-worker.sh
     networks:
       - spark-net
     depends_on:
@@ -87,8 +100,6 @@ services:
       - SPARK_MASTER=spark://spark-test:7077
       - SPARK_HOME=/opt/spark
       - SPARK_CLASSPATH=/opt/spark/jars/*
-      - SPARK_BUILD_DIR=/opt/spark
-      - SPARK_SCALA_VERSION=2.13
       - SPARK_LOCAL_DIRS=/opt/spark/tmp
       - SPARK_WORKER_DIR=/opt/spark/tmp
       - SPARK_DRIVER_DIR=/opt/spark/tmp
@@ -96,8 +107,6 @@ services:
       - .:/opt/spark/work
       - ./client-tmp:/opt/spark/tmp
       - ./client-work:/opt/spark/work
-      - /opt/spark/jars:/opt/spark/jars:ro
-      - /opt/spark/conf:/opt/spark/conf:ro
     networks:
       - spark-net
     depends_on:
