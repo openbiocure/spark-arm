@@ -124,8 +124,7 @@ USER root
 
 # Copy configuration files with correct permissions
 COPY --chown=hive:hive conf/hive-site.xml.template $HIVE_HOME/conf/hive-site.xml.template
-COPY --chown=hive:hive conf/logging/log4j.properties $HIVE_HOME/conf/
-COPY --chown=hive:hive conf/logging/log4j2.xml $HIVE_HOME/conf/
+COPY --chown=hive:hive conf/log4j2.xml $HIVE_HOME/conf/
 COPY --chown=hive:hive conf/core-site.xml $HIVE_HOME/conf/
 COPY --chown=hive:hive conf/hdfs-site.xml $HIVE_HOME/conf/
 

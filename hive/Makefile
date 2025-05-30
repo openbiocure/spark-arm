@@ -10,6 +10,46 @@ VERSIONS_SCRIPT ?= ../versions.sh
 include ../debug.env
 export
 
+# Make help the default target
+.DEFAULT_GOAL := help
+
+# Help target
+help:
+	@echo "Hive Metastore Management Commands:"
+	@echo ""
+	@echo "Basic Operations:"
+	@echo "  make build              - Build the Hive Docker image"
+	@echo "  make test              - Start a test container with Hive metastore"
+	@echo "  make stop-test         - Stop and remove the test container"
+	@echo "  make shell             - Get an interactive shell in the container"
+	@echo "  make clean             - Stop and remove test container"
+	@echo ""
+	@echo "Container Management:"
+	@echo "  make debug-shell       - Start a clean container with just a shell (no metastore)"
+	@echo "  make logs              - View container logs"
+	@echo ""
+	@echo "Registry Operations:"
+	@echo "  make push              - Push the Docker image to registry"
+	@echo ""
+	@echo "Kubernetes Operations:"
+	@echo "  make deploy            - Deploy Hive metastore to Kubernetes"
+	@echo "  make undeploy          - Remove Hive metastore from Kubernetes"
+	@echo "  make status            - Check deployment status"
+	@echo "  make clean-deploy      - Remove deployment and PVCs"
+	@echo "  make verify            - Verify deployment health"
+	@echo "  make k3s-shell         - Get a shell in a crashed k3s pod"
+	@echo "  make k3s-logs          - View logs from previous k3s container"
+	@echo ""
+	@echo "Environment Variables:"
+	@echo "  POSTGRES_HOST          - PostgreSQL host (default: postgresql)"
+	@echo "  POSTGRES_PORT          - PostgreSQL port (default: 5432)"
+	@echo "  POSTGRES_DB            - Database name (default: hive)"
+	@echo "  POSTGRES_USER          - Database user (default: hive)"
+	@echo "  POSTGRES_PASSWORD      - Database password (default: hive)"
+	@echo "  HIVE_LOG_LEVEL         - Logging level (default: DEBUG)"
+	@echo ""
+	@echo "For more information about each command, see the Makefile comments."
+
 # Build the Hive Docker image
 build:
 	@echo "Building Hive Docker image..."

@@ -19,11 +19,11 @@
         </RollingFile>
     </Appenders>
     <Loggers>
-        <Root level="DEBUG">
+        <Root level="INFO">
             <AppenderRef ref="Console"/>
             <AppenderRef ref="FileAppender"/>
         </Root>
-        <Logger name="org.apache.spark" level="DEBUG"/>
-        <Logger name="org.sparkproject" level="DEBUG"/>
+        <Logger name="org.apache.spark" level="INFO"/>
+        <Logger name="org.sparkproject" level="INFO"/>
     </Loggers>
 </Configuration>

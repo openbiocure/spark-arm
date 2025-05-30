@@ -98,6 +98,7 @@ nohup java -cp "$HADOOP_CLASSPATH" \
   -Dhive.log.level=DEBUG \
   -Dhadoop.home.dir=/opt/hadoop \
   org.apache.hadoop.hive.metastore.HiveMetaStore \
+  -dbType postgres \
   > ${HIVE_HOME}/logs/metastore.out 2>&1 &
 
 # Store the process ID and check startup
