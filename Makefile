@@ -33,34 +33,37 @@ push:
 # Common directory setup for all targets
 setup-dirs:
 	@echo "Setting up local directories..."
-	@mkdir -p $(PWD)/logs $(PWD)/master-tmp $(PWD)/worker-tmp $(PWD)/client-tmp \
-		$(PWD)/master-work $(PWD)/worker-work $(PWD)/client-work $(PWD)/worker-logs
+	@mkdir -p \
+		$(PWD)/mount/test-mount/logs/events \
+		$(PWD)/mount/test-mount/tmp \
+		$(PWD)/mount/test-mount/work \
+		$(PWD)/mount/client/tmp \
+		$(PWD)/mount/client/work
 	@echo "Setting permissions for Spark directories..."
+	@sudo chown -R 1000:1000 \
+		$(PWD)/mount/test-mount/tmp \
+		$(PWD)/mount/test-mount/work \
+		$(PWD)/mount/test-mount/logs
 	@sudo chown -R $(shell id -u):$(shell id -g) \
-		$(PWD)/logs $(PWD)/master-tmp $(PWD)/worker-tmp $(PWD)/client-tmp \
-		$(PWD)/master-work $(PWD)/worker-work $(PWD)/client-work $(PWD)/worker-logs
+		$(PWD)/mount/client/tmp \
+		$(PWD)/mount/client/work
 	@sudo chmod -R 777 \
-		$(PWD)/logs $(PWD)/master-tmp $(PWD)/worker-tmp $(PWD)/client-tmp \
-		$(PWD)/master-work $(PWD)/worker-work $(PWD)/client-work $(PWD)/worker-logs
-	@-rm -f $(PWD)/logs/spark-container.log 2>/dev/null || true
-	@touch $(PWD)/logs/spark-container.log
-	@sudo chown $(shell id -u):$(shell id -g) $(PWD)/logs/spark-container.log
-	@chmod 644 $(PWD)/logs/spark-container.log
+		$(PWD)/mount/test-mount/tmp \
+		$(PWD)/mount/test-mount/work \
+		$(PWD)/mount/test-mount/logs \
+		$(PWD)/mount/client/tmp \
+		$(PWD)/mount/client/work
 	@echo "Directory permissions updated."
 
 # Modify test target
 test: create-network setup-dirs
 	@echo "Testing Spark container locally..."
 	@echo "Loading environment variables from debug.env..."
-	@echo "Creating required directories..."
-	@rm -rf $(PWD)/logs $(PWD)/master-tmp
-	@-mkdir -p $(PWD)/logs $(PWD)/master-tmp 2>/dev/null || true
-	@chmod -R 777 $(PWD)/logs $(PWD)/master-tmp
-	@echo "Stopping and removing existing container if any..."
+	@echo "Starting Spark container..."
 	@docker stop $(SPARK_CONTAINER_NAME) 2>/dev/null || true
 	@docker rm $(SPARK_CONTAINER_NAME) 2>/dev/null || true
-	@echo "Starting Spark container..."
 	@docker run -d \
+		--user 1000:1000 \
 		--name $(SPARK_CONTAINER_NAME) \
 		--network spark-net \
 		--platform linux/arm64 \
@@ -73,41 +76,41 @@ test: create-network setup-dirs
 		-e SPARK_HOME=/opt/spark \
 		-e HADOOP_HOME=/opt/hadoop \
 		-e SPARK_LOCAL_DIRS=/opt/spark/tmp \
-		-e SPARK_WORKER_DIR=/opt/spark/tmp \
+		-e SPARK_WORKER_DIR=/opt/spark/work \
 		-e SPARK_DRIVER_DIR=/opt/spark/tmp \
 		-e AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL} \
 		-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID} \
 		-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY} \
-		-v $(PWD)/logs:/opt/spark/logs \
-		-v $(PWD)/master-tmp:/opt/spark/tmp \
+		-v $(PWD)/mount/test-mount/logs:/opt/spark/logs \
+		-v $(PWD)/mount/test-mount/tmp:/opt/spark/tmp \
+		-v $(PWD)/mount/test-mount/work:/opt/spark/work \
 		$(SPARK_IMAGE_NAME):$(TAG)
 
 # Modify test-worker target
 test-worker: create-network setup-dirs
 	@echo "Testing Spark worker container locally..."
 	@echo "Loading environment variables from debug.env..."
-	@echo "Creating required directories..."
-	@rm -rf $(PWD)/worker-logs $(PWD)/worker-tmp
-	@-mkdir -p $(PWD)/worker-logs $(PWD)/worker-tmp 2>/dev/null || true
-	@chmod -R 777 $(PWD)/worker-logs $(PWD)/worker-tmp
 	@echo "Starting Spark worker container..."
 	@docker run -d \
+		--user 1000:1000 \
 		--name $(SPARK_CONTAINER_NAME)-worker \
 		--network spark-net \
 		--platform linux/arm64 \
 		-p 8081:8081 \
+		-p 8082:8082 \
 		-e SPARK_NODE_TYPE=worker \
 		-e SPARK_MASTER_URL=spark://$(SPARK_CONTAINER_NAME):7077 \
 		-e SPARK_WORKER_MEMORY=3G \
 		-e SPARK_WORKER_CORES=2 \
 		-e SPARK_LOCAL_DIRS=/opt/spark/tmp \
-		-e SPARK_WORKER_DIR=/opt/spark/tmp \
+		-e SPARK_WORKER_DIR=/opt/spark/work \
 		-e SPARK_DRIVER_DIR=/opt/spark/tmp \
 		-e AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL} \
 		-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID} \
 		-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY} \
-		-v $(PWD)/worker-logs:/opt/spark/logs \
-		-v $(PWD)/worker-tmp:/opt/spark/tmp \
+		-v $(PWD)/mount/test-mount/logs:/opt/spark/logs \
+		-v $(PWD)/mount/test-mount/tmp:/opt/spark/tmp \
+		-v $(PWD)/mount/test-mount/work:/opt/spark/work \
 		$(SPARK_IMAGE_NAME):$(TAG)
 
 # Stop and remove test container
@@ -132,19 +135,21 @@ shell: setup-dirs
 		docker stop $(SPARK_CONTAINER_NAME) 2>/dev/null || true; \
 		docker rm $(SPARK_CONTAINER_NAME) 2>/dev/null || true; \
 		docker run -it \
+			--user 1000:1000 \
 			--name $(SPARK_CONTAINER_NAME) \
 			--network spark-net \
 			--platform linux/arm64 \
 			--entrypoint /bin/bash \
 			-e SPARK_NODE_TYPE=master \
 			-e SPARK_LOCAL_DIRS=/opt/spark/tmp \
-			-e SPARK_WORKER_DIR=/opt/spark/tmp \
+			-e SPARK_WORKER_DIR=/opt/spark/work \
 			-e SPARK_DRIVER_DIR=/opt/spark/tmp \
 			-e AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL} \
 			-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID} \
 			-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY} \
-			-v $(PWD)/logs:/opt/spark/logs \
-			-v $(PWD)/master-tmp:/opt/spark/tmp \
+			-v $(PWD)/mount/test-mount/logs:/opt/spark/logs \
+			-v $(PWD)/mount/test-mount/tmp:/opt/spark/tmp \
+			-v $(PWD)/mount/test-mount/work:/opt/spark/work \
 			$(SPARK_IMAGE_NAME):$(TAG); \
 	fi
 
@@ -158,6 +163,7 @@ shell-worker: setup-dirs
 		docker stop $(SPARK_CONTAINER_NAME)-worker 2>/dev/null || true; \
 		docker rm $(SPARK_CONTAINER_NAME)-worker 2>/dev/null || true; \
 		docker run -it \
+			--user 1000:1000 \
 			--name $(SPARK_CONTAINER_NAME)-worker \
 			--network spark-net \
 			--platform linux/arm64 \
@@ -167,23 +173,33 @@ shell-worker: setup-dirs
 			-e SPARK_WORKER_MEMORY=3G \
 			-e SPARK_WORKER_CORES=2 \
 			-e SPARK_LOCAL_DIRS=/opt/spark/tmp \
-			-e SPARK_WORKER_DIR=/opt/spark/tmp \
+			-e SPARK_WORKER_DIR=/opt/spark/work \
 			-e SPARK_DRIVER_DIR=/opt/spark/tmp \
 			-e AWS_ENDPOINT_URL=$${AWS_ENDPOINT_URL} \
 			-e AWS_ACCESS_KEY_ID=$${AWS_ACCESS_KEY_ID} \
 			-e AWS_SECRET_ACCESS_KEY=$${AWS_SECRET_ACCESS_KEY} \
-			-v $(PWD)/worker-logs:/opt/spark/logs \
-			-v $(PWD)/worker-tmp:/opt/spark/tmp \
+			-v $(PWD)/mount/test-mount/logs:/opt/spark/logs \
+			-v $(PWD)/mount/test-mount/tmp:/opt/spark/tmp \
+			-v $(PWD)/mount/test-mount/work:/opt/spark/work \
 			$(SPARK_IMAGE_NAME):$(TAG); \
 	fi
 
+# Clean up application directories
+clean-apps:
+	@echo "Cleaning up application directories..."
+	@sudo find $(PWD)/mount -type d -name "app-*" -exec rm -rf {} + 2>/dev/null || true
+	@sudo find $(PWD)/mount -type d -name "spark-*" -exec rm -rf {} + 2>/dev/null || true
+	@echo "Application directories cleaned."
+
 # Clean up everything
-clean: stop-test stop-test-worker
+clean: stop-test stop-test-worker clean-apps
 	@echo "Cleaning up Docker resources..."
 	@docker network rm spark-net 2>/dev/null || true
-	docker rmi $(SPARK_IMAGE_NAME):$(TAG) 2>/dev/null || true
-	docker rmi $(SPARK_IMAGE_NAME):latest 2>/dev/null || true
-	docker rmi $(SPARK_IMAGE_NAME):stable 2>/dev/null || true
+	@docker rmi $(SPARK_IMAGE_NAME):$(TAG) 2>/dev/null || true
+	@docker rmi $(SPARK_IMAGE_NAME):latest 2>/dev/null || true
+	@docker rmi $(SPARK_IMAGE_NAME):stable 2>/dev/null || true
+	@echo "Removing all created directories..."
+	@sudo rm -rf $(PWD)/mount
 	@echo "Cleanup complete."
 
 # Create Docker network
@@ -195,16 +211,16 @@ create-network:
 client: setup-dirs
 	@echo "Starting Spark shell client..."
 	docker run -it --network spark-net \
-		-v $(PWD):/opt/spark/work \
-		-v $(PWD)/client-tmp:/opt/spark/tmp \
+		--user 1000:1000 \
+		-v $(PWD)/mount/client/work:/opt/spark/work \
+		-v $(PWD)/mount/client/tmp:/opt/spark/tmp \
 		-e SPARK_MASTER_URL=spark://spark-test:7077 \
 		-e SPARK_MASTER=spark://spark-test:7077 \
 		-e SPARK_HOME=/opt/spark \
 		-e SPARK_CLASSPATH=/opt/spark/jars/* \
-		-e SPARK_BUILD_DIR=/opt/spark \
 		-e SPARK_SCALA_VERSION=2.13 \
 		-e SPARK_LOCAL_DIRS=/opt/spark/tmp \
-		-e SPARK_WORKER_DIR=/opt/spark/tmp \
+		-e SPARK_WORKER_DIR=/opt/spark/work \
 		-e SPARK_DRIVER_DIR=/opt/spark/tmp \
 		ghcr.io/openbiocure/spark-arm:v0.6.2 \
 		/opt/spark/bin/run-example \
@@ -213,7 +229,6 @@ client: setup-dirs
 		--conf spark.driver.host=spark-client \
 		--conf spark.driver.bindAddress=0.0.0.0 \
 		--conf spark.blockManager.port=4041 \
-		--conf spark.local.dir=/opt/spark/tmp \
 		--executor-memory 512m \
 		--total-executor-cores 1 \
 		SparkPi 10
@@ -232,11 +247,9 @@ compose-up: setup-dirs
 	@echo "  - make compose-test     # Run SparkPi example"
 	@echo "  - make compose-client   # Get a bash shell"
 
-compose-down:
+compose-down: clean-apps
 	@echo "Stopping Spark cluster..."
 	@docker compose down -v
-	@echo "Cleaning up local directories..."
-	@rm -rf $(PWD)/logs $(PWD)/master-tmp $(PWD)/worker-tmp $(PWD)/client-tmp $(PWD)/worker-logs
 	@echo "Cluster stopped and cleaned up."
 
 compose-logs:
@@ -248,17 +261,20 @@ compose-client:
 	@docker compose exec spark-client /bin/bash
 
 compose-test:
-	@echo "Running SparkPi example..."
-	@docker compose exec spark-client /opt/spark/bin/run-example \
+	@echo "Running SparkPi example with spark-submit..."
+	@docker compose exec spark-client /opt/spark/bin/spark-submit \
+		--verbose \
 		--master spark://spark-test:7077 \
+		--class org.apache.spark.examples.SparkPi \
 		--conf spark.driver.port=4040 \
 		--conf spark.driver.host=spark-test-client \
 		--conf spark.driver.bindAddress=0.0.0.0 \
 		--conf spark.blockManager.port=4041 \
 		--conf spark.local.dir=/opt/spark/tmp \
-		--executor-memory 512m \
-		--total-executor-cores 1 \
-		SparkPi 10
+		--conf spark.executor.memory=512m \
+		--conf spark.cores.max=1 \
+		/opt/spark/examples/jars/spark-examples_2.13-3.5.5.jar \
+		10
 
 compose-shell:
 	@echo "Starting Spark shell..."

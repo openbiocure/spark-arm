@@ -84,9 +84,7 @@ ENV SPARK_HOME=/opt/spark \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/spark/bin \
     HADOOP_HOME=/opt/hadoop \
     LD_LIBRARY_PATH=/opt/hadoop/lib/native \
-    SPARK_CLASSPATH=/opt/spark/jars/* \
-    SPARK_BUILD_DIR=/opt/spark \
-    SPARK_EXECUTOR_BUILD_DIR=/opt/spark
+    SPARK_CLASSPATH=/opt/spark/jars/*
 
 # Copy verification marker and native libraries
 COPY --from=url-verifier /tmp/urls-verified /tmp/
@@ -115,6 +113,7 @@ ENV SPARK_VERSION=${SPARK_VERSION} \
     DELTA_VERSION=${DELTA_VERSION} \
     AWS_SDK_VERSION=${AWS_SDK_VERSION} \
     SCALA_VERSION=${SCALA_VERSION} \
+    SPARK_SCALA_VERSION=${SCALA_VERSION} \
     SPARK_URL_TEMPLATE=${SPARK_URL_TEMPLATE} \
     HADOOP_URL_TEMPLATE=${HADOOP_URL_TEMPLATE} \
     DELTA_URL_TEMPLATE=${DELTA_URL_TEMPLATE} \
@@ -140,28 +139,14 @@ RUN --mount=type=cache,target=/var/cache/apt \
         vim-tiny \
         less \
         && rm -rf /var/lib/apt/lists/* && \
-    # Create user and directories with home directory
-    groupadd -r spark && \
-    useradd -r -m -g spark spark && \
-    # Create directories with proper permissions
-    mkdir -p ${SPARK_HOME} ${HADOOP_HOME}/lib/native ${SPARK_HOME}/jars ${SPARK_HOME}/logs ${SPARK_HOME}/tmp && \
-    # Set ownership of all directories
-    chown -R spark:spark ${SPARK_HOME} ${HADOOP_HOME} /home/spark && \
+    # Create necessary directories
+    mkdir -p ${SPARK_HOME}/logs/events && \
+    mkdir -p ${SPARK_HOME}/tmp && \
+    mkdir -p ${SPARK_HOME}/work && \
+    # Run the user setup script
+    ${SPARK_HOME}/scripts/setup-user.sh && \
     # Set permissions for directories
-    chmod 755 ${SPARK_HOME} ${HADOOP_HOME} /home/spark && \
-    # Ensure spark user has access to essential commands
-    chmod -R 755 /usr/bin/bash /usr/bin/date /usr/bin/mkdir && \
-    # Ensure spark user can write to /opt/spark
-    chown -R spark:spark /opt/spark && \
-    chmod -R 755 /opt/spark && \
-    # Verify essential commands are available and accessible
-    su - spark -c "which bash" && \
-    su - spark -c "which date" && \
-    su - spark -c "which mkdir" && \
-    # Verify directories are accessible
-    su - spark -c "test -w ${SPARK_HOME}/logs" && \
-    su - spark -c "test -w ${SPARK_HOME}/tmp" && \
-    su - spark -c "test -w /opt/spark"
+    chown -R spark:spark ${SPARK_HOME}/logs ${SPARK_HOME}/tmp ${SPARK_HOME}/work
 
 # Download and install Spark as spark user
 USER spark
@@ -170,7 +155,7 @@ RUN --mount=type=cache,target=/tmp/downloads \
 
 # Copy and set up log4j2.xml as root
 USER root
-COPY log4j2.xml ${SPARK_HOME}/conf/
+COPY docker/conf/log4j2.xml ${SPARK_HOME}/conf/
 RUN chown spark:spark ${SPARK_HOME}/conf/log4j2.xml && \
     chmod 644 ${SPARK_HOME}/conf/log4j2.xml
 

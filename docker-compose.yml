@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   spark-master:
     image: ${SPARK_IMAGE_NAME:-ghcr.io/openbiocure/spark-arm}:${TAG:-v0.6.2}
     platform: linux/arm64
     container_name: spark-test
     hostname: spark-test
-    user: "spark:spark"  # Run as spark user
+    user: "1000:1000"  # Use explicit UID/GID
     env_file:
       - debug.env
     ports:
@@ -17,10 +15,16 @@ services:
       - SPARK_MASTER_HOST=spark-test
       - SPARK_MASTER_PORT=7077
       - SPARK_MASTER_WEBUI_PORT=8080
+      - SPARK_WORKER_DIR=/opt/spark/work
+      - SPARK_LOCAL_DIRS=/opt/spark/tmp
+      - SPARK_DRIVER_DIR=/opt/spark/tmp
+      - HADOOP_USER_NAME=spark
+      - SPARK_USER=spark
     volumes:
-      - ./logs:/opt/spark/logs
-      - ./master-tmp:/opt/spark/tmp
-      - ./master-work:/opt/spark/work
+      - ./mount/test-mount/logs:/opt/spark/logs
+      - ./mount/test-mount/logs/events:/opt/spark/logs/events
+      - ./mount/test-mount/tmp:/opt/spark/tmp
+      - ./mount/test-mount/work:/opt/spark/work
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-test", "--port", "7077", "--webui-port", "8080"]
     networks:
       - spark-net
@@ -36,7 +40,7 @@ services:
     platform: linux/arm64
     container_name: spark-test-worker
     hostname: spark-test-worker
-    user: "spark:spark"  # Run as spark user
+    user: "1000:1000"  # Use explicit UID/GID
     env_file:
       - debug.env
     ports:
@@ -47,7 +51,7 @@ services:
       - SPARK_WORKER_MEMORY=1G
       - SPARK_WORKER_CORES=1
       - SPARK_LOCAL_DIRS=/opt/spark/tmp
-      - SPARK_WORKER_DIR=/opt/spark/tmp
+      - SPARK_WORKER_DIR=/opt/spark/work
       - SPARK_DRIVER_DIR=/opt/spark/tmp
       - SPARK_HOME=/opt/spark
       - SPARK_CLASSPATH=/opt/spark/jars/*
@@ -59,15 +63,15 @@ services:
       - SPARK_DIST_CLASSPATH=/opt/spark/jars/*
       - SPARK_RESOURCES_DIR=/opt/spark
       - SPARK_CONF_DIR=/opt/spark/conf
-      - SPARK_BUILD_DIR=/opt/spark
-      - SPARK_EXECUTOR_BUILD_DIR=/opt/spark
       - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SPARK_DAEMON_JAVA_OPTS=-Djava.net.preferIPv4Stack=true -Dspark.worker.bindAddress=0.0.0.0 -Dspark.worker.webui.bindAddress=0.0.0.0
     volumes:
-      - ./worker-logs:/opt/spark/logs
-      - ./worker-tmp:/opt/spark/tmp
-      - ./worker-work:/opt/spark/work
+      - ./mount/test-mount/logs:/opt/spark/logs
+      - ./mount/test-mount/logs/events:/opt/spark/logs/events
+      - ./mount/test-mount/tmp:/opt/spark/tmp
+      - ./mount/test-mount/work:/opt/spark/work
     command: /opt/spark/scripts/start-worker.sh
     networks:
       - spark-net
@@ -92,7 +96,7 @@ services:
     platform: linux/arm64
     container_name: spark-test-client
     hostname: spark-test-client
-    user: "spark:spark"  # Run as spark user
+    user: "1000:1000"  # Use explicit UID/GID
     env_file:
       - debug.env
     environment:
@@ -101,12 +105,13 @@ services:
       - SPARK_HOME=/opt/spark
       - SPARK_CLASSPATH=/opt/spark/jars/*
       - SPARK_LOCAL_DIRS=/opt/spark/tmp
-      - SPARK_WORKER_DIR=/opt/spark/tmp
+      - SPARK_WORKER_DIR=/opt/spark/work
       - SPARK_DRIVER_DIR=/opt/spark/tmp
     volumes:
-      - .:/opt/spark/work
-      - ./client-tmp:/opt/spark/tmp
-      - ./client-work:/opt/spark/work
+      - ./mount/test-mount/logs:/opt/spark/logs
+      - ./mount/test-mount/logs/events:/opt/spark/logs/events
+      - ./mount/client/tmp:/opt/spark/tmp
+      - ./mount/client/work:/opt/spark/work
     networks:
       - spark-net
     depends_on:
@@ -129,4 +134,6 @@ volumes:
   client-tmp:
   master-work:
   worker-work:
-  client-work: 
+  client-work:
+  mount-client-tmp:
+  mount-client-work: 

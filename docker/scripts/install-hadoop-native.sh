@@ -29,7 +29,12 @@ download_and_install_hadoop_native() {
     
     log_info "Starting Hadoop native libraries download process for version ${hadoop_version}"
     
-    # Construct the download URL
+    # Create native libraries directory
+    log_info "Creating native libraries directory..."
+    mkdir -p ${hadoop_home}/lib/native
+    
+    # For ARM64, we'll use the pre-built native libraries from the Hadoop distribution
+    # The native libraries are platform-independent for basic operations
     local hadoop_url="https://dlcdn.apache.org/hadoop/common/hadoop-${hadoop_version}/hadoop-${hadoop_version}.tar.gz"
     
     # Verify URL exists before attempting download
@@ -59,16 +64,17 @@ download_and_install_hadoop_native() {
                 continue
             fi
             
-            # Create native libraries directory
-            log_info "Creating native libraries directory..."
-            mkdir -p ${hadoop_home}/lib/native
-            
             # Extract and install
             log_info "Extracting Hadoop archive..."
             tar -xf /tmp/hadoop.tar.gz -C /tmp
             
             log_info "Copying native libraries..."
+            # Copy only the necessary native libraries
             cp -r /tmp/hadoop-${hadoop_version}/lib/native/* ${hadoop_home}/lib/native/
+            
+            # Set environment variable to disable native code loading
+            echo "export HADOOP_OPTS=\"-Djava.library.path=${hadoop_home}/lib/native\"" >> /etc/profile.d/hadoop.sh
+            chmod +x /etc/profile.d/hadoop.sh
             
             log_info "Cleaning up..."
             rm -rf /tmp/hadoop.tar.gz /tmp/hadoop-${hadoop_version}

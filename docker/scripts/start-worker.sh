@@ -23,7 +23,7 @@ start_spark_worker() {
     # Set default worker properties if not provided
     export SPARK_WORKER_CORES=${SPARK_WORKER_CORES:-"1"}
     export SPARK_WORKER_MEMORY=${SPARK_WORKER_MEMORY:-"1g"}
-    export SPARK_WORKER_WEBUI_PORT=${SPARK_WORKER_WEBUI_PORT:-"8081"}
+    export SPARK_WORKER_WEBUI_PORT=${SPARK_WORKER_WEBUI_PORT:-"8082"}
     export SPARK_WORKER_PORT=${SPARK_WORKER_PORT:-"8081"}
     export SPARK_LOCAL_DIRS=${SPARK_LOCAL_DIRS:-"/opt/spark/tmp"}
 
@@ -31,8 +31,10 @@ start_spark_worker() {
     # We are inside Kubernetes
         export SPARK_WORKER_HOST=${SPARK_WORKER_HOST:-$(hostname -f)}
     else
-        # We are running locally
+        # We are running locally - force IPv4
         export SPARK_WORKER_HOST=${SPARK_WORKER_HOST:-$(hostname -i | awk '{print $1}')}
+        # Force Java to prefer IPv4
+        export SPARK_DAEMON_JAVA_OPTS="${SPARK_DAEMON_JAVA_OPTS:-} -Djava.net.preferIPv4Stack=true"
     fi
 
     
@@ -45,6 +47,9 @@ start_spark_worker() {
     exec "${JAVA_HOME:-/opt/java/openjdk}/bin/java" \
         -cp "${SPARK_HOME}/conf/:${SPARK_HOME}/jars/*" \
         -Xmx1g \
+        -Djava.net.preferIPv4Stack=true \
+        -Dspark.worker.bindAddress=0.0.0.0 \
+        -Dspark.worker.webui.bindAddress=0.0.0.0 \
         org.apache.spark.deploy.worker.Worker \
         --host "${SPARK_WORKER_HOST}" \
         --port "${SPARK_WORKER_PORT}" \
