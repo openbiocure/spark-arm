@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Source the versions file
+source /opt/spark/scripts/versions.sh
+
 # Source the logging library
 source /opt/spark/scripts/logging.sh
 
@@ -60,7 +63,8 @@ download_all_jars() {
     
     # List of JARs to download
     local urls=(
-        "${DELTA_URL_TEMPLATE}"
+        "${DELTA_CORE_URL_TEMPLATE}"
+        "${DELTA_SPARK_URL_TEMPLATE}"
         "${AWS_BUNDLE_URL_TEMPLATE}"
         "${AWS_S3_URL_TEMPLATE}"
         "${HADOOP_AWS_URL_TEMPLATE}"

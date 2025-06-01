@@ -1,54 +1,90 @@
-# Fix Hadoop Version Mismatch Issue
+# Upgrade to Spark 4.0.0 with Hadoop 3.3.6
 
-## Current Problem
-- Spark 3.5.5's pre-built binary (spark-3.5.5-bin-hadoop3-scala2.13.tgz) includes:
-  - hadoop-client-api-3.3.4.jar
-  - hadoop-client-runtime-3.3.4.jar
-  - hadoop-yarn-server-web-proxy-3.3.4.jar
-  - hadoop-shaded-guava-1.1.1.jar
-  - parquet-hadoop-1.13.1.jar
-  - And other Hadoop 3.3.4 related JARs
-  - These are the core Hadoop libraries that Spark uses for its filesystem operations
-- We're using hadoop-aws-3.3.6.jar which expects Hadoop 3.3.6
-- This causes ClassNotFoundException for org.apache.hadoop.fs.impl.prefetch.PrefetchingStatistics
-  because this class exists in Hadoop 3.3.6 but not in the 3.3.4 libraries that Spark provides
+## Current Situation
+- Using Spark 3.5.5 with built-in Hadoop 3.3.4 libraries
+- Hadoop 3.3.6 is available in Apache's main mirrors
+- Experiencing ClassNotFoundException with PrefetchingStatistics due to version mismatch
+- Hive metastore running separately with PostgreSQL
+- Delta Lake integration in place
 
-## How the Mismatch Happens
-1. In versions.sh (get_versions function):
-   ```bash
-   local SPARK_VERSION="3.5.5"
-   local HADOOP_VERSION="3.3.6"
-   ```
-   - These local variables are used to construct URLs
-   - HADOOP_VERSION is used to build HADOOP_AWS_URL_TEMPLATE for hadoop-aws-3.3.6.jar
-   - The function exports these as environment variables for other scripts to use
+## Upgrade Plan
 
-2. In docker/scripts/download-spark.sh:
-   - Downloads spark-3.5.5-bin-hadoop3-scala2.13.tgz
-   - This pre-built binary contains Hadoop 3.3.4 libraries
-   - These become the core Hadoop libraries used by Spark
+### 1. Version Updates
+- [ ] Update versions.sh:
+  ```bash
+  SPARK_VERSION="4.0.0"
+  HADOOP_VERSION="3.3.6"  # Already set, but now will be compatible
+  DELTA_VERSION="3.0.0"   # Verify compatibility with Spark 4.0.0
+  SCALA_VERSION="2.13"    # Verify if still compatible
+  ```
 
-3. In docker/scripts/download-jars.sh:
-   - Downloads additional JARs including hadoop-aws-3.3.6.jar
-   - This JAR expects Hadoop 3.3.6 classes
-   - But Spark is running with Hadoop 3.3.4 libraries
+### 2. Docker Image Changes
+- [ ] Verify all URLs in docker/scripts/verify-urls.sh
+- [ ] Test Hadoop 3.3.6 native libraries build in hadoop-builder stage
+- [ ] Update any Spark-specific configurations in docker/conf/
+- [ ] Test image build process with new versions
 
-## Required Changes
+### 3. Hive Integration
+- [ ] Verify Hive metastore compatibility with Spark 4.0.0
+- [ ] Test Hive JAR versions:
+  - hive-common
+  - hive-cli
+  - hive-metastore
+  - hive-exec
+  - hive-serde
+  - hive-jdbc
+- [ ] Test Hive metastore connection
+- [ ] Verify Hive SQL compatibility
+- [ ] Test Hive table operations
 
-1. In versions.sh:
-   - Change HADOOP_VERSION from "3.3.6" to "3.3.4" to match Spark's built-in version
-   - Update HADOOP_AWS_URL_TEMPLATE to use 3.3.4 instead of 3.3.6
+### 4. Delta Lake
+- [ ] Verify Delta Lake 3.0.0 compatibility with Spark 4.0.0
+- [ ] Test Delta Lake operations:
+  - Table creation
+  - Data writing
+  - Data reading
+  - Schema evolution
+  - Time travel
+  - Merge operations
 
-2. In docker/Dockerfile:
-   - No changes needed as it uses versions from versions.sh
-   - Will automatically pick up the new Hadoop version
+### 5. Testing Requirements
+- [ ] Unit tests for Spark operations
+- [ ] Integration tests for:
+  - S3/MinIO connectivity
+  - Hive metastore operations
+  - Delta Lake operations
+  - Spark SQL queries
+- [ ] Performance testing
+- [ ] End-to-end workflow testing
 
-3. After Changes:
-   - Rebuild Spark Docker image to ensure new versions are used
-   - Test S3 connectivity to verify the fix
-   - Verify no ClassNotFoundException errors occur
+### 6. Documentation Updates
+- [ ] Update version information in README.md
+- [ ] Document any breaking changes
+- [ ] Update configuration examples
+- [ ] Add upgrade notes for future reference
 
-## Future Consideration
-- Plan a separate upgrade to Spark 4.0.0 as a future project
-- This will allow proper testing and validation of all Spark 4.0.0 features
-- Keep current fix focused on resolving the immediate Hadoop version mismatch
+### 7. Rollback Plan
+- [ ] Document current working configuration
+- [ ] Create backup of current Docker images
+- [ ] Prepare rollback scripts
+- [ ] Test rollback procedure
+
+## No Impact Areas
+- Hive service (runs independently)
+- PostgreSQL database
+- MinIO/S3 storage
+- Basic Spark cluster architecture
+
+## Success Criteria
+- [ ] All Spark operations work with Hadoop 3.3.6
+- [ ] No ClassNotFoundException errors
+- [ ] Hive metastore connection works
+- [ ] Delta Lake operations work
+- [ ] All existing Spark jobs run successfully
+- [ ] Performance meets or exceeds current levels
+
+## Future Considerations
+- Monitor Spark 4.0.0 release notes for any issues
+- Plan for future Delta Lake updates
+- Consider Hive version upgrade in future
+- Document any new features available in Spark 4.0.0

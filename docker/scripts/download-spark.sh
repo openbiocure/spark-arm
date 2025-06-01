@@ -79,9 +79,18 @@ download_and_install_spark() {
             log_info "Extracting Spark archive to temporary directory..."
             cd "$temp_dir" && tar -xf spark.tgz
             
+            # Get the actual directory name from the archive
+            local spark_dir=$(ls -d spark-${SPARK_VERSION}-bin-hadoop3*)
+            if [ ! -d "$spark_dir" ]; then
+                log_error "Could not find Spark directory in archive"
+                cd - > /dev/null
+                rm -rf "$temp_dir"
+                return 1
+            fi
+            
             # Move files to final location
-            log_info "Moving files to ${spark_home}..."
-            mv "spark-${SPARK_VERSION}-bin-hadoop3-scala${SCALA_VERSION}"/* "${spark_home}/"
+            log_info "Moving files from ${spark_dir} to ${spark_home}..."
+            mv "$spark_dir"/* "${spark_home}/"
             
             # Clean up
             log_info "Cleaning up..."

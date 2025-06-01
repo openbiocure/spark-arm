@@ -8,7 +8,8 @@ ARG AWS_SDK_VERSION
 ARG SCALA_VERSION
 ARG SPARK_URL_TEMPLATE
 ARG HADOOP_URL_TEMPLATE
-ARG DELTA_URL_TEMPLATE
+ARG DELTA_CORE_URL_TEMPLATE
+ARG DELTA_SPARK_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
 ARG HADOOP_AWS_URL_TEMPLATE
@@ -32,7 +33,8 @@ ARG AWS_SDK_VERSION
 ARG SCALA_VERSION
 ARG SPARK_URL_TEMPLATE
 ARG HADOOP_URL_TEMPLATE
-ARG DELTA_URL_TEMPLATE
+ARG DELTA_CORE_URL_TEMPLATE
+ARG DELTA_SPARK_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
 ARG HADOOP_AWS_URL_TEMPLATE
@@ -45,7 +47,8 @@ ENV SPARK_VERSION="${SPARK_VERSION}" \
     SCALA_VERSION="${SCALA_VERSION}" \
     SPARK_URL_TEMPLATE="${SPARK_URL_TEMPLATE}" \
     HADOOP_URL_TEMPLATE="${HADOOP_URL_TEMPLATE}" \
-    DELTA_URL_TEMPLATE="${DELTA_URL_TEMPLATE}" \
+    DELTA_CORE_URL_TEMPLATE="${DELTA_CORE_URL_TEMPLATE}" \
+    DELTA_SPARK_URL_TEMPLATE="${DELTA_SPARK_URL_TEMPLATE}" \
     AWS_BUNDLE_URL_TEMPLATE="${AWS_BUNDLE_URL_TEMPLATE}" \
     AWS_S3_URL_TEMPLATE="${AWS_S3_URL_TEMPLATE}" \
     HADOOP_AWS_URL_TEMPLATE="${HADOOP_AWS_URL_TEMPLATE}"
@@ -60,35 +63,19 @@ RUN --mount=type=cache,target=/var/cache/apt \
     /tmp/verify-urls.sh && \
     touch /tmp/urls-verified
 
-# Stage 2: Hadoop native libraries builder
-FROM eclipse-temurin:17-jdk-jammy AS hadoop-builder
-ARG HADOOP_VERSION
-ENV HADOOP_HOME=/opt/hadoop
-
-# Create scripts directory and copy logging script
-RUN mkdir -p /opt/spark/scripts
-COPY --from=url-verifier /opt/spark/scripts/logging.sh /opt/spark/scripts/
-COPY docker/scripts/install-hadoop-native.sh /tmp/
-RUN chmod +x /tmp/*.sh /opt/spark/scripts/*.sh
-
-# Install Hadoop native libraries
-RUN --mount=type=cache,target=/var/cache/apt \
-    --mount=type=cache,target=/var/lib/apt \
-    /tmp/install-hadoop-native.sh ${HADOOP_VERSION} ${HADOOP_HOME}
-
-# Stage 3: Final runtime image
-FROM eclipse-temurin:17-jdk-jammy
+# Stage 2: Final runtime image
+FROM --platform=linux/arm64 eclipse-temurin:17-jdk-jammy
 
 # Common environment variables
 ENV SPARK_HOME=/opt/spark \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/spark/bin \
     HADOOP_HOME=/opt/hadoop \
     LD_LIBRARY_PATH=/opt/hadoop/lib/native \
-    SPARK_CLASSPATH=/opt/spark/jars/*
+    SPARK_CLASSPATH=/opt/spark/jars/* \
+    HADOOP_OPTS="-Djava.library.path=/opt/hadoop/lib/native"
 
-# Copy verification marker and native libraries
+# Copy verification marker
 COPY --from=url-verifier /tmp/urls-verified /tmp/
-COPY --from=hadoop-builder /opt/hadoop/lib/native ${HADOOP_HOME}/lib/native/
 
 # Copy all scripts
 COPY docker/scripts/ ${SPARK_HOME}/scripts/
@@ -103,7 +90,8 @@ ARG AWS_SDK_VERSION
 ARG SCALA_VERSION
 ARG SPARK_URL_TEMPLATE
 ARG HADOOP_URL_TEMPLATE
-ARG DELTA_URL_TEMPLATE
+ARG DELTA_CORE_URL_TEMPLATE
+ARG DELTA_SPARK_URL_TEMPLATE
 ARG AWS_BUNDLE_URL_TEMPLATE
 ARG AWS_S3_URL_TEMPLATE
 ARG HADOOP_AWS_URL_TEMPLATE
@@ -116,7 +104,8 @@ ENV SPARK_VERSION=${SPARK_VERSION} \
     SPARK_SCALA_VERSION=${SCALA_VERSION} \
     SPARK_URL_TEMPLATE=${SPARK_URL_TEMPLATE} \
     HADOOP_URL_TEMPLATE=${HADOOP_URL_TEMPLATE} \
-    DELTA_URL_TEMPLATE=${DELTA_URL_TEMPLATE} \
+    DELTA_CORE_URL_TEMPLATE=${DELTA_CORE_URL_TEMPLATE} \
+    DELTA_SPARK_URL_TEMPLATE=${DELTA_SPARK_URL_TEMPLATE} \
     AWS_BUNDLE_URL_TEMPLATE=${AWS_BUNDLE_URL_TEMPLATE} \
     AWS_S3_URL_TEMPLATE=${AWS_S3_URL_TEMPLATE} \
     HADOOP_AWS_URL_TEMPLATE=${HADOOP_AWS_URL_TEMPLATE}
@@ -138,15 +127,27 @@ RUN --mount=type=cache,target=/var/cache/apt \
         htop \
         vim-tiny \
         less \
+        file \
+        make \
+        cmake \
+        gcc \
+        g++ \
+        libssl-dev \
+        zlib1g-dev \
         && rm -rf /var/lib/apt/lists/* && \
     # Create necessary directories
     mkdir -p ${SPARK_HOME}/logs/events && \
     mkdir -p ${SPARK_HOME}/tmp && \
     mkdir -p ${SPARK_HOME}/work && \
+    mkdir -p ${HADOOP_HOME}/lib/native && \
     # Run the user setup script
     ${SPARK_HOME}/scripts/setup-user.sh && \
     # Set permissions for directories
-    chown -R spark:spark ${SPARK_HOME}/logs ${SPARK_HOME}/tmp ${SPARK_HOME}/work
+    chown -R spark:spark ${SPARK_HOME}/logs ${SPARK_HOME}/tmp ${SPARK_HOME}/work ${HADOOP_HOME}
+
+# Install Hadoop native libraries as root
+RUN --mount=type=cache,target=/tmp/downloads \
+    ${SPARK_HOME}/scripts/install-hadoop-native.sh ${HADOOP_VERSION} ${HADOOP_HOME}
 
 # Download and install Spark as spark user
 USER spark

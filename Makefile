@@ -13,6 +13,7 @@ export
 # Build the Spark Docker image
 build:
 	@echo "Building Spark Docker image..."
+	@echo "Using LOCAL_MIRROR_URL: $$LOCAL_MIRROR_URL"
 	@TAG=$$(cat tag); \
 	BUILD_ARGS=$$(bash $(VERSIONS_SCRIPT) | grep -v '^#' | grep -v '^$$' | tr '\n' ' ' | sed 's/^ *//;s/ *$$//' | awk '{for(i=1;i<=NF;i++) printf "--build-arg %s ", $$i}'); \
 	BUILD_CMD="docker build --platform linux/arm64 -t spark-arm:$$TAG $$BUILD_ARGS --build-arg IMAGE_VERSION=$$TAG -f docker/Dockerfile ."; \

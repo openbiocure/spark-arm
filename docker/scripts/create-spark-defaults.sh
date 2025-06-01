@@ -10,6 +10,9 @@ create_spark_defaults() {
 spark.driver.extraClassPath /opt/spark/jars/*
 spark.executor.extraClassPath /opt/spark/jars/*
 
+# Package dependencies
+spark.jars.packages org.apache.hadoop:hadoop-aws:3.3.4
+
 # Delta Lake configuration
 spark.sql.extensions io.delta.sql.DeltaSparkSessionExtension
 spark.sql.catalog.spark_catalog org.apache.spark.sql.delta.catalog.DeltaCatalog

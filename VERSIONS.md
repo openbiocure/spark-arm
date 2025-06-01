@@ -1,52 +1,80 @@
-# Version Information
+# Spark 4.0.0 Upgrade Compatibility Matrix
 
-## Current Versions
-- Spark: 3.5.5 (Latest stable version)
-- Delta Lake: 3.0.0 (Latest version compatible with Spark 3.5.x)
-- Hadoop: 3.3.6
-- Scala: 2.13
-- Java: 17 (OpenJDK)
+## Core Components
+| Component    | Version | Notes                                    | Status |
+|-------------|---------|------------------------------------------|--------|
+| Spark       | 4.0.0   | Requires Java 17                         | ✅     |
+| Hadoop      | 3.3.6   | Officially supported by Spark 4.0.0      | ✅     |
+| Scala       | 2.12    | Required by Spark 4.0.0                  | ✅     |
+| Java        | 17      | Required by Spark 4.0.0                  | ✅     |
+| Python      | 3.8+    | Required for PySpark                     | ✅     |
+| R           | 4.0+    | Required for SparkR                      | ✅     |
 
-## Version Selection Rationale
-- Spark 3.5.5: Latest stable version with significant improvements in performance and features
-- Delta Lake 3.0.0: Latest version that provides full compatibility with Spark 3.5.x
-- Hadoop 3.3.6: Latest stable version with improved S3A support
-- Scala 2.13: Latest stable version with better performance and features
-- Java 17: LTS version with long-term support and modern features
+## Storage Components
+| Component    | Version | Notes                                    | Status |
+|-------------|---------|------------------------------------------|--------|
+| Delta Core  | 2.4.0   | Compatible with Spark 4.0.0              | ✅     |
+| Delta Spark | 3.3.2   | Latest stable version for Spark 4.0.0    | ✅     |
+| Hudi        | TBD     | Need to verify Spark 4.0.0 compatibility | ❓     |
+| Iceberg     | TBD     | Need to verify Spark 4.0.0 compatibility | ❓     |
 
-## Dependencies
-- Spark SQL & Hive: 3.5.5
-- Delta Core: 3.0.0
-- Hadoop AWS & Client: 3.3.6
-- AWS SDK: 1.12.262
-- PostgreSQL: 42.7.1
-- Log4j: 2.20.0
-- ScalaTest: 3.2.18
+## AWS Components
+| Component           | Version  | Notes                                    | Status |
+|--------------------|----------|------------------------------------------|--------|
+| AWS SDK Bundle     | 1.12.262 | Compatible with Hadoop 3.3.6             | ✅     |
+| AWS S3             | 1.12.262 | Compatible with Hadoop 3.3.6             | ✅     |
+| AWS Glue           | TBD      | Need to verify Spark 4.0.0 compatibility | ❓     |
+| AWS EMR            | TBD      | Need to verify Spark 4.0.0 compatibility | ❓     |
 
-## Version Update Process
-1. Check Apache Spark releases: https://spark.apache.org/downloads.html
-2. Verify Delta Lake compatibility: https://docs.delta.io/latest/releases.html
-3. Test all Spark operations with new versions
-4. Update Dockerfile and build.sbt
-5. Rebuild and test in development environment
-6. Update documentation
+## Hive Components
+| Component           | Version  | Notes                                    | Status |
+|--------------------|----------|------------------------------------------|--------|
+| Hive               | TBD      | Need to verify Spark 4.0.0 compatibility | ❓     |
+| Hive Metastore     | TBD      | Need to verify Spark 4.0.0 compatibility | ❓     |
+| Hive JDBC Driver   | TBD      | Need to verify Spark 4.0.0 compatibility | ❓     |
 
-## Migration to Pure Scala
-The migration from Python to Scala was driven by:
-1. Direct version control without PySpark constraints
-2. Better performance without Python-Scala bridge overhead
-3. Simplified dependency management through sbt
-4. Immediate access to latest Spark and Delta features
-5. Cleaner architecture with single language stack
+## URLs to Verify
+| Component           | URL                                                                 | Status |
+|--------------------|---------------------------------------------------------------------|--------|
+| Spark              | https://dlcdn.apache.org/spark/spark-4.0.0/spark-4.0.0-bin-hadoop3.tgz | ✅     |
+| Hadoop             | https://dlcdn.apache.org/hadoop/common/hadoop-3.3.6/hadoop-3.3.6.tar.gz | ✅     |
+| Delta Core         | https://repo1.maven.org/maven2/io/delta/delta-core_2.12/2.4.0/delta-core_2.12-2.4.0.jar | ✅     |
+| Delta Spark        | https://repo1.maven.org/maven2/io/delta/delta-spark_2.12/3.3.2/delta-spark_2.12-3.3.2.jar | ✅     |
+| AWS SDK Bundle     | https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar | ✅     |
+| AWS S3             | https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.12.262/aws-java-sdk-s3-1.12.262.jar | ✅     |
+| Hadoop AWS         | https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.6/hadoop-aws-3.3.6.jar | ✅     |
 
-## Testing
-- All tests are now written in Scala
-- Using ScalaTest for unit testing
-- Integration tests run in Kubernetes cluster
-- Test job uses spark-submit with fat JAR
+## Build & Runtime Requirements
+| Component    | Version | Notes                                    | Status |
+|-------------|---------|------------------------------------------|--------|
+| Maven       | 3.8+    | For building native libraries            | ✅     |
+| CMake       | 3.18+   | For building native libraries            | ✅     |
+| GCC         | 9.0+    | For building native libraries            | ✅     |
+| Make        | 4.0+    | For building native libraries            | ✅     |
 
 ## Notes
-- Delta Lake 3.0.0 requires Spark >=3.5.0
-- All Delta JARs in container must match version
-- Test job uses spark-submit with proper classpath
-- S3A filesystem configuration in spark-defaults.conf 
+- All components must be compatible with ARM64 architecture
+- Delta Lake versions verified and compatible with Spark 4.0.0
+- Hive integration needs to be verified
+- Native library support needs to be verified
+- All storage formats (Delta, Hudi, Iceberg) need compatibility testing
+- AWS services integration needs to be verified
+- Python and R bindings need to be tested
+
+## TODO
+- [x] Verify Delta Spark version compatibility
+- [ ] Verify Hudi version compatibility
+- [ ] Verify Iceberg version compatibility
+- [ ] Test Hive integration
+- [ ] Verify native library support
+- [ ] Update versions.sh with confirmed versions
+- [ ] Update Dockerfile with new versions
+- [ ] Test S3 operations
+- [ ] Test Delta Lake operations
+- [ ] Test Hudi operations
+- [ ] Test Iceberg operations
+- [ ] Test Hive operations
+- [ ] Test AWS Glue integration
+- [ ] Test Python bindings
+- [ ] Test R bindings
+- [ ] Verify all native libraries on ARM64
