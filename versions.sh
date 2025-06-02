@@ -12,11 +12,12 @@ get_versions() {
     # Core versions
     local SPARK_VERSION="4.0.0"
     local HADOOP_VERSION="3.3.6"
-    local DELTA_VERSION="3.3.2"  # Updated to match delta-spark version
+    local DELTA_CORE_VERSION="2.4.0"  # Separate version for Delta Core
+    local DELTA_SPARK_VERSION="3.3.2" # Separate version for Delta Spark
     local HIVE_VERSION="3.0.0"
     local POSTGRES_VERSION="42.7.3"
     local AWS_SDK_VERSION="1.12.262"
-    local SCALA_VERSION="2.12"  # Changed to 2.12 for Spark 4.0.0
+    local SCALA_VERSION="2.13"  # Spark 4.0.0 actually uses Scala 2.13
 
     # Evaluate URL templates with expanded versions
     # Spark and Hadoop
@@ -28,9 +29,9 @@ get_versions() {
         local HADOOP_URL="https://dlcdn.apache.org/hadoop/common/hadoop-${HADOOP_VERSION}/hadoop-${HADOOP_VERSION}.tar.gz"
     fi
 
-    # Delta Lake
-    local DELTA_CORE_URL="https://repo1.maven.org/maven2/io/delta/delta-core_${SCALA_VERSION}/2.4.0/delta-core_${SCALA_VERSION}-2.4.0.jar"
-    local DELTA_SPARK_URL="https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_VERSION}/delta-spark_${SCALA_VERSION}-${DELTA_VERSION}.jar"
+    # Delta Lake - using Scala 2.13 to match Spark 4.0.0
+    local DELTA_CORE_URL="https://repo1.maven.org/maven2/io/delta/delta-core_${SCALA_VERSION}/${DELTA_CORE_VERSION}/delta-core_${SCALA_VERSION}-${DELTA_CORE_VERSION}.jar"
+    local DELTA_SPARK_URL="https://repo1.maven.org/maven2/io/delta/delta-spark_${SCALA_VERSION}/${DELTA_SPARK_VERSION}/delta-spark_${SCALA_VERSION}-${DELTA_SPARK_VERSION}.jar"
 
     # Hive
     local HIVE_URL="https://dlcdn.apache.org/hive/hive-standalone-metastore-${HIVE_VERSION}/hive-standalone-metastore-${HIVE_VERSION}-bin.tar.gz"
@@ -48,7 +49,8 @@ get_versions() {
 # Core versions
 SPARK_VERSION=${SPARK_VERSION}
 HADOOP_VERSION=${HADOOP_VERSION}
-DELTA_VERSION=${DELTA_VERSION}
+DELTA_CORE_VERSION=${DELTA_CORE_VERSION}
+DELTA_SPARK_VERSION=${DELTA_SPARK_VERSION}
 HIVE_VERSION=${HIVE_VERSION}
 POSTGRES_VERSION=${POSTGRES_VERSION}
 AWS_SDK_VERSION=${AWS_SDK_VERSION}
