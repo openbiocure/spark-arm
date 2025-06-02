@@ -1,0 +1,57 @@
+# Core component versions
+versions:
+  spark: "3.5.3"
+  hadoop: "3.3.2"
+  delta:
+    core: "3.3.2"
+    spark: "3.3.2"
+    storage: "3.3.2"
+  hive: "3.0.0"
+  postgres: "42.7.3"
+  aws_sdk: "1.12.262"
+  scala:
+    version: "2.12"
+    full_version: "2.12.18"
+  java:
+    version: "11"
+    distribution: "zulu"
+    full_version: "11.0.21"
+
+# URL templates for downloads
+urls:
+  spark: "https://dlcdn.apache.org/spark/spark-{{ versions.spark }}/spark-{{ versions.spark }}-bin-hadoop3.tgz"
+  hadoop: "https://dlcdn.apache.org/hadoop/common/hadoop-{{ versions.hadoop }}/hadoop-{{ versions.hadoop }}.tar.gz"
+  delta:
+    core: "https://repo1.maven.org/maven2/io/delta/delta-core_{{ versions.scala.version }}/{{ versions.delta.core }}/delta-core_{{ versions.scala.version }}-{{ versions.delta.core }}.jar"
+    spark: "https://repo1.maven.org/maven2/io/delta/delta-spark_{{ versions.scala.version }}/{{ versions.delta.spark }}/delta-spark_{{ versions.scala.version }}-{{ versions.delta.spark }}.jar"
+    storage: "https://repo1.maven.org/maven2/io/delta/delta-storage/{{ versions.delta.storage }}/delta-storage-{{ versions.delta.storage }}.jar"
+  hive:
+    metastore: "https://dlcdn.apache.org/hive/hive-standalone-metastore-{{ versions.hive }}/hive-standalone-metastore-{{ versions.hive }}-bin.tar.gz"
+    jdbc: "https://repo1.maven.org/maven2/org/apache/hive/hive-jdbc/{{ versions.hive }}/hive-jdbc-{{ versions.hive }}.jar"
+  postgres: "https://repo1.maven.org/maven2/org/postgresql/postgresql/{{ versions.postgres }}/postgresql-{{ versions.postgres }}.jar"
+  aws:
+    bundle: "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/{{ versions.aws_sdk }}/aws-java-sdk-bundle-{{ versions.aws_sdk }}.jar"
+    s3: "https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/{{ versions.aws_sdk }}/aws-java-sdk-s3-{{ versions.aws_sdk }}.jar"
+    hadoop: "https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/{{ versions.hadoop }}/hadoop-aws-{{ versions.hadoop }}.jar"
+
+# Component-specific configurations
+components:
+  spark:
+    delta_log_store: "org.apache.spark.sql.delta.storage.S3SingleDriverLogStore"
+    s3a:
+      path_style_access: true
+      connection_ssl_enabled: false
+  hive:
+    metastore:
+      host: "hive-metastore"
+      port: 9083
+    server2:
+      port: 10000
+      thrift_bind_host: "0.0.0.0"
+  postgres:
+    host: "localhost"
+    port: 5432
+    database: "hive"
+  minio:
+    endpoint: "http://localhost:9000"
+    bucket: "test"

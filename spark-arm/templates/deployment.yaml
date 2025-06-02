@@ -1,3 +1,0 @@
-# This file is deprecated and should be removed.
-# The master StatefulSet is now defined in master-statefulset.yaml
-# The worker StatefulSet is now defined in worker-statefulset.yaml

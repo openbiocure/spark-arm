@@ -1,0 +1,74 @@
+# Base image
+FROM azul/zulu-openjdk:{{ versions.java.full_version }}
+
+# Set environment variables
+ENV HIVE_VERSION={{ versions.hive }}
+ENV HIVE_HOME=/opt/hive
+ENV PATH=$PATH:$HIVE_HOME/bin
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install Hive
+RUN wget -q {{ urls.hive.metastore }} -O /tmp/hive.tgz \
+    && tar xzf /tmp/hive.tgz -C /opt \
+    && mv /opt/apache-hive-metastore-${HIVE_VERSION}-bin ${HIVE_HOME} \
+    && rm /tmp/hive.tgz
+
+# Download PostgreSQL JDBC driver
+RUN mkdir -p ${HIVE_HOME}/lib \
+    && wget -q {{ urls.postgres }} -O ${HIVE_HOME}/lib/postgresql-jdbc.jar
+
+# Download AWS dependencies
+RUN mkdir -p ${HIVE_HOME}/lib/aws \
+    && wget -q {{ urls.aws.bundle }} -O ${HIVE_HOME}/lib/aws/aws-java-sdk-bundle.jar \
+    && wget -q {{ urls.aws.s3 }} -O ${HIVE_HOME}/lib/aws/aws-java-sdk-s3.jar \
+    && wget -q {{ urls.aws.hadoop }} -O ${HIVE_HOME}/lib/aws/hadoop-aws.jar
+
+# Configure Hive
+COPY hive-site.xml ${HIVE_HOME}/conf/
+COPY hive-log4j2.properties ${HIVE_HOME}/conf/
+
+# Set Hive configuration
+ENV HIVE_CONF_DIR=${HIVE_HOME}/conf
+ENV HIVE_CLASSPATH=${HIVE_HOME}/lib/*:${HIVE_HOME}/lib/aws/*
+
+# Configure Metastore settings
+ENV HIVE_METASTORE_HOST={{ env.HIVE_METASTORE_HOST | default(components.hive.metastore.host) }}
+ENV HIVE_METASTORE_PORT={{ env.HIVE_METASTORE_PORT | default(components.hive.metastore.port) }}
+ENV HIVE_METASTORE_URI={{ env.HIVE_METASTORE_URI | default('thrift://' + components.hive.metastore.host + ':' + components.hive.metastore.port | string) }}
+
+# Configure HiveServer2 settings
+ENV HIVE_SERVER2_PORT={{ env.HIVE_SERVER2_PORT | default(components.hive.server2.port) }}
+ENV HIVE_SERVER2_THRIFT_BIND_HOST={{ env.HIVE_SERVER2_THRIFT_BIND_HOST | default(components.hive.server2.thrift_bind_host) }}
+
+# Configure PostgreSQL settings
+ENV POSTGRES_HOST={{ env.POSTGRES_HOST | default(components.postgres.host) }}
+ENV POSTGRES_PORT={{ env.POSTGRES_PORT | default(components.postgres.port) }}
+ENV POSTGRES_DB={{ env.POSTGRES_DB | default(components.postgres.database) }}
+# These must be provided via environment variables
+ENV POSTGRES_USER={{ env.POSTGRES_USER }}
+ENV POSTGRES_PASSWORD={{ env.POSTGRES_PASSWORD }}
+
+# Configure S3/MinIO settings
+ENV AWS_ENDPOINT_URL={{ env.AWS_ENDPOINT_URL | default(components.minio.endpoint) }}
+# These must be provided via environment variables
+ENV AWS_ACCESS_KEY_ID={{ env.AWS_ACCESS_KEY_ID }}
+ENV AWS_SECRET_ACCESS_KEY={{ env.AWS_SECRET_ACCESS_KEY }}
+
+# Set working directory
+WORKDIR ${HIVE_HOME}
+
+# Expose ports
+EXPOSE {{ components.hive.metastore.port }} {{ components.hive.server2.port }}
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:{{ components.hive.metastore.port }}/ || exit 1
+
+# Default command (can be overridden)
+CMD ["bin/start-metastore"] 
