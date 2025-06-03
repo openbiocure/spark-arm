@@ -1,5 +1,5 @@
-jinja2>=3.1.2
-pyyaml>=6.0.1
-python-dotenv>=1.0.0
-click>=8.1.7
-rich>=13.7.0 
+PyYAML>=6.0.1
+Jinja2>=3.1.2
+typing-extensions>=4.7.1
+pathlib>=1.0.1
+argparse>=1.4.0 
