@@ -1,0 +1,42 @@
+# Classpath configuration
+spark.driver.extraClassPath {{ env.SPARK_HOME }}/jars/*
+spark.executor.extraClassPath {{ env.SPARK_HOME }}/jars/*
+
+# Package dependencies
+spark.jars.packages org.apache.hadoop:hadoop-aws:3.3.4
+
+# Delta Lake configuration
+spark.sql.extensions io.delta.sql.DeltaSparkSessionExtension
+spark.sql.catalog.spark_catalog org.apache.spark.sql.delta.catalog.DeltaCatalog
+spark.delta.logStore.class {{ env.SPARK_DELTA_LOG_STORE_CLASS }}
+spark.sql.warehouse.dir {{ env.SPARK_SQL_WAREHOUSE_DIR }}
+
+# Resource Management
+spark.dynamicAllocation.enabled true
+spark.dynamicAllocation.minExecutors 1
+spark.dynamicAllocation.maxExecutors 10
+spark.dynamicAllocation.initialExecutors 1
+
+# Memory Management
+spark.memory.fraction 0.8
+spark.memory.storageFraction 0.5
+
+# Logging
+spark.eventLog.enabled true
+spark.eventLog.dir {{ env.SPARK_HOME }}/logs/events
+
+# UI Configuration
+spark.ui.port 4041
+
+# S3A Configuration
+spark.hadoop.fs.s3a.path.style.access {{ env.SPARK_HADOOP_FS_S3A_PATH_STYLE_ACCESS | string | lower }}
+spark.hadoop.fs.s3a.connection.ssl.enabled {{ env.SPARK_HADOOP_FS_S3A_CONNECTION_SSL_ENABLED | string | lower }}
+
+{% if env.SPARK_SQL_CATALOG_IMPLEMENTATION %}
+# Hive Configuration
+spark.sql.catalogImplementation {{ env.SPARK_SQL_CATALOG_IMPLEMENTATION }}
+{% endif %}
+
+{% if env.SPARK_HIVE_METASTORE_URI %}
+spark.hive.metastore.uris {{ env.SPARK_HIVE_METASTORE_URI }}
+{% endif %}

@@ -1,0 +1,52 @@
+[build-system]
+requires = [ "hatchling" ]
+build-backend = "hatchling.build"
+
+
+[project]
+name = "docker-builder"
+version = "0.1.0"
+description = "Python-based Spark Docker builder and management tools"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+dependencies = [
+"PyYAML>=6.0.1",
+"Jinja2>=3.1.2",
+"typing-extensions>=4.7.1",
+"pathlib>=1.0.1",
+"argparse>=1.4.0",
+"python-dotenv>=1.0.0",
+"click>=8.1.7",
+"rich>=13.7.0",
+"pydantic>=2.0",
+"pydantic-settings>=2.0"
+]
+
+
+[[project.authors]]
+name = "Mohammad Shehab"
+email = "mohammad.shehab@example.com"
+
+
+[project.scripts]
+docker-builder = "docker_builder.cli:cli"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["docker_builder"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.flake8]
+ignore = ["W291", "W293"]
+
+[tool.ruff]
+ignore = ["W291", "W293"]
+
+[tool.ruff.lint]
+ignore = ["W293", "W291", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"*" = ["W293", "W291", "E501"]

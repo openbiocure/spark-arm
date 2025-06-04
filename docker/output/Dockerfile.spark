@@ -1,0 +1,107 @@
+# Base image
+FROM azul/zulu-openjdk:11.0.21
+
+# Enable BuildKit features
+# syntax=docker/dockerfile:1.4
+
+# Set environment variables
+ENV SPARK_VERSION=3.5.3
+ENV HADOOP_VERSION=3.3.2
+ENV SCALA_VERSION=2.12
+ENV SPARK_HOME=/opt/spark
+ENV HADOOP_HOME=/opt/hadoop
+ENV PATH=$PATH:/opt/spark/bin:/opt/hadoop/bin
+ENV SPARK_NODE_TYPE=master
+
+# Install system dependencies with cache mounts
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        netcat-openbsd \
+        procps \
+        tini \
+        coreutils \
+        bash \
+        net-tools \
+        iproute2 \
+        dnsutils \
+        htop \
+        vim-tiny \
+        less \
+        file \
+        make \
+        cmake \
+        gcc \
+        g++ \
+        libssl-dev \
+        zlib1g-dev \
+        wget \
+        python3-pip \
+        && rm -rf /var/lib/apt/lists/* && \
+    pip3 install --no-cache-dir requests
+
+# Create scripts directory and copy Python scripts
+COPY --chmod=755 scripts/spark/entrypoint.py /opt/spark/scripts/
+COPY --chmod=755 scripts/spark/start_master.py /opt/spark/scripts/
+COPY --chmod=755 scripts/spark/start_worker.py /opt/spark/scripts/
+COPY --chmod=755 scripts/spark/create_spark_defaults.py /opt/spark/scripts/
+COPY --chmod=755 scripts/spark/download-jars.py /opt/spark/scripts/
+
+# Download and install components
+RUN --mount=type=cache,target=/tmp/downloads \
+    --mount=type=cache,target=/tmp/extract \
+    mkdir -p /tmp/downloads /tmp/extract && \
+    python3 /opt/spark/scripts/download-jars.py && \
+    # Extract Spark and Hadoop
+    tar xzf /tmp/downloads/spark.tgz -C /tmp/extract && \
+    mv /tmp/extract/spark-3.5.3-bin-without-hadoop /opt/spark && \
+    tar xzf /tmp/downloads/hadoop.tgz -C /tmp/extract && \
+    mv /tmp/extract/hadoop-3.3.2 /opt/hadoop && \
+    rm -rf /tmp/downloads/* /tmp/extract/*
+
+# Configure Spark
+COPY --chown=root:root conf/log4j2.xml /opt/spark/conf/
+COPY --chmod=755 scripts/spark/create_spark_defaults.py /opt/spark/scripts/
+RUN python3 /opt/spark/scripts/create_spark_defaults.py
+
+# Set Spark configuration
+ENV SPARK_CONF_DIR=/opt/spark/conf
+ENV SPARK_CLASSPATH=/opt/spark/jars/delta/*:/opt/spark/jars/aws/*
+
+# Configure S3/MinIO settings
+ENV AWS_ENDPOINT_URL=http://localhost:9000
+
+# AWS credentials must be provided via environment variables at runtime
+ENV AWS_ACCESS_KEY_ID=
+ENV AWS_SECRET_ACCESS_KEY=
+
+# Configure Delta Lake
+ENV SPARK_DELTA_LOG_STORE_CLASS=org.apache.spark.sql.delta.storage.S3SingleDriverLogStore
+ENV SPARK_SQL_WAREHOUSE_DIR=s3a://warehouse/warehouse
+
+# Configure S3A settings
+ENV SPARK_HADOOP_FS_S3A_PATH_STYLE_ACCESS=true
+ENV SPARK_HADOOP_FS_S3A_CONNECTION_SSL_ENABLED=false
+
+# Configure Hive integration
+
+
+# Set up spark user and directories
+RUN /opt/spark/scripts/setup-spark-user.sh
+
+# Set working directory
+WORKDIR /opt/spark
+
+# Expose ports
+EXPOSE 4040 7077 8080 8081 10000 10002
+
+# Use tini as init system
+ENTRYPOINT ["/usr/bin/tini", "--", "python3", "/opt/spark/scripts/entrypoint.py"]
+
+# Default command (will be overridden by entrypoint.sh based on SPARK_NODE_TYPE)
+CMD [] 
+# Copy component config
+COPY config/spark.yml /opt/spark/config/
+COPY scripts/spark /opt/spark/scripts/

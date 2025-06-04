@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  spark-master:
+    image: ${DOCKER_REGISTRY:-ghcr.io/openbiocure/spark-arm}/spark:${DOCKER_TAG:-latest}
+    environment:
+      - SPARK_NODE_TYPE=master
+      - SPARK_MASTER_HOST=0.0.0.0
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SPARK_SQL_WAREHOUSE_DIR=${SPARK_SQL_WAREHOUSE_DIR}
+      - SPARK_SQL_CATALOG_IMPLEMENTATION=hive
+      - SPARK_HIVE_METASTORE_URI=thrift://hive-metastore:9083
+    ports:
+      - "4040:4040"  # Spark UI
+      - "7077:7077"  # Spark Master
+      - "8080:8080"  # Spark Master Web UI
+    volumes:
+      - spark-data:/opt/spark/data
+    networks:
+      - spark-net
+    depends_on:
+      - hive-metastore
+
+  spark-worker:
+    image: ${DOCKER_REGISTRY:-ghcr.io/openbiocure/spark-arm}/spark:${DOCKER_TAG:-latest}
+    environment:
+      - SPARK_NODE_TYPE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+      - SPARK_WORKER_CORES=${SPARK_WORKER_CORES:-1}
+      - SPARK_WORKER_MEMORY=${SPARK_WORKER_MEMORY:-1g}
+      - AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - SPARK_SQL_WAREHOUSE_DIR=${SPARK_SQL_WAREHOUSE_DIR}
+      - SPARK_SQL_CATALOG_IMPLEMENTATION=hive
+      - SPARK_HIVE_METASTORE_URI=thrift://hive-metastore:9083
+    ports:
+      - "8081:8081"  # Spark Worker Web UI
+    volumes:
+      - spark-data:/opt/spark/data
+    depends_on:
+      - spark-master
+      - hive-metastore
+    networks:
+      - spark-net
+
+  hive-metastore:
+    image: ${DOCKER_REGISTRY:-ghcr.io/openbiocure/spark-arm}/hive:${DOCKER_TAG:-latest}
+    environment:
+      - DB_DRIVER=postgresql
+      - DB_HOST=${POSTGRES_HOST}
+      - DB_PORT=${POSTGRES_PORT:-5432}
+      - DB_NAME=${POSTGRES_DB:-hive}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - METASTORE_PORT=9083
+    ports:
+      - "9083:9083"  # Hive Metastore
+      - "10000:10000"  # Hive Server2
+    volumes:
+      - hive-data:/opt/hive/data
+    networks:
+      - spark-net
+
+volumes:
+  spark-data:
+  hive-data:
+
+networks:
+  spark-net:
+    driver: bridge 

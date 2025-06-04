@@ -7,7 +7,15 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
-import argparse
+
+# Add the scripts directory to Python path
+scripts_dir = Path(__file__).parent
+sys.path.append(str(scripts_dir.parent.parent.parent))
+
+try:
+    from docker_builder.env import SparkEnv, load_spark_env
+except ImportError:
+    raise ImportError("Could not import SparkEnv. Make sure the package is installed with 'pip install -e .'")
 
 # Configure logging
 logging.basicConfig(
@@ -32,32 +40,31 @@ class WorkerConfig:
     spark_home: str
 
     @classmethod
-    def from_env(cls) -> 'WorkerConfig':
+    def from_env(cls, env: SparkEnv) -> 'WorkerConfig':
         """Create configuration from environment variables."""
         # Required environment variables
-        master_url = os.environ.get('SPARK_MASTER_URL')
-        if not master_url:
+        if not env.SPARK_MASTER_URL:
             raise ValueError("SPARK_MASTER_URL environment variable is required")
 
         # Determine worker host based on environment
         if Path('/var/run/secrets/kubernetes.io/serviceaccount/token').exists():
             logger.info("Running in Kubernetes environment")
-            worker_host = os.environ.get('SPARK_WORKER_HOST', socket.getfqdn())
+            worker_host = env.SPARK_WORKER_HOST or socket.getfqdn()
         else:
             logger.info("Running in local environment")
-            worker_host = os.environ.get('SPARK_WORKER_HOST', '0.0.0.0')
+            worker_host = env.SPARK_WORKER_HOST or '0.0.0.0'
 
         return cls(
-            master_url=master_url,
+            master_url=env.SPARK_MASTER_URL,
             worker_host=worker_host,
-            worker_cores=int(os.environ.get('SPARK_WORKER_CORES', '1')),
-            worker_memory=os.environ.get('SPARK_WORKER_MEMORY', '1g'),
-            worker_webui_port=int(os.environ.get('SPARK_WORKER_WEBUI_PORT', '8081')),
-            worker_port=int(os.environ.get('SPARK_WORKER_PORT', '0')),
-            local_dirs=os.environ.get('SPARK_LOCAL_DIRS', '/opt/spark/tmp'),
-            worker_dir=os.environ.get('SPARK_WORKER_DIR', '/opt/spark/work'),
-            java_home=os.environ.get('JAVA_HOME', '/opt/java/openjdk'),
-            spark_home=os.environ.get('SPARK_HOME', '/opt/spark')
+            worker_cores=env.SPARK_WORKER_CORES,
+            worker_memory=env.SPARK_WORKER_MEMORY,
+            worker_webui_port=env.SPARK_WORKER_WEBUI_PORT,
+            worker_port=env.SPARK_WORKER_PORT,
+            local_dirs=env.SPARK_LOCAL_DIRS,
+            worker_dir=env.SPARK_WORKER_DIR,
+            java_home=env.JAVA_HOME,
+            spark_home=env.SPARK_HOME
         )
 
     def setup_directories(self) -> None:
@@ -102,19 +109,11 @@ class WorkerConfig:
             value = getattr(self, field)
             logger.info(f"{field}: {value}")
 
-def main() -> None:
-    """Main entry point for the worker script."""
+def start_worker(env: SparkEnv) -> None:
+    """Start Spark worker node."""
     try:
-        # Parse command line arguments
-        parser = argparse.ArgumentParser(description='Start Spark worker')
-        parser.add_argument('--debug', action='store_true', help='Enable debug logging')
-        args = parser.parse_args()
-
-        if args.debug:
-            logger.setLevel(logging.DEBUG)
-
         # Load configuration
-        config = WorkerConfig.from_env()
+        config = WorkerConfig.from_env(env)
         config.log_configuration()
         
         # Setup directories
@@ -132,5 +131,6 @@ def main() -> None:
         logger.error(f"Failed to start worker: {e}")
         sys.exit(1)
 
-if __name__ == '__main__':
-    main() 
+if __name__ == "__main__":
+    env = load_spark_env()
+    start_worker(env) 

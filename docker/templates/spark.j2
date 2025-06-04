@@ -1,13 +1,16 @@
 # Base image
 FROM azul/zulu-openjdk:{{ versions.java.full_version }}
 
+# Enable BuildKit features
+# syntax=docker/dockerfile:1.4
+
 # Set environment variables
 ENV SPARK_VERSION={{ versions.spark }}
 ENV HADOOP_VERSION={{ versions.hadoop }}
 ENV SCALA_VERSION={{ versions.scala.version }}
-ENV SPARK_HOME=/opt/spark
-ENV HADOOP_HOME=/opt/hadoop
-ENV PATH=$PATH:$SPARK_HOME/bin:$HADOOP_HOME/bin
+ENV SPARK_HOME={{ components.spark.home }}
+ENV HADOOP_HOME={{ components.hadoop.home }}
+ENV PATH=$PATH:{{ components.spark.home }}/bin:{{ components.hadoop.home }}/bin
 ENV SPARK_NODE_TYPE=master
 
 # Install system dependencies with cache mounts
@@ -35,55 +38,56 @@ RUN --mount=type=cache,target=/var/cache/apt \
         libssl-dev \
         zlib1g-dev \
         wget \
-        && rm -rf /var/lib/apt/lists/*
+        python3-pip \
+        && rm -rf /var/lib/apt/lists/* && \
+    pip3 install --no-cache-dir requests
 
 # Create scripts directory and copy Python scripts
-COPY --chmod=755 scripts/entrypoint.py /opt/spark/scripts/
-COPY --chmod=755 scripts/start_master.py /opt/spark/scripts/
-COPY --chmod=755 scripts/start_worker.py /opt/spark/scripts/
-COPY --chmod=755 scripts/setup-spark-user.sh /opt/spark/scripts/
+COPY --chmod=755 scripts/spark/entrypoint.py {{ components.spark.home }}/scripts/
+COPY --chmod=755 scripts/spark/start_master.py {{ components.spark.home }}/scripts/
+COPY --chmod=755 scripts/spark/start_worker.py {{ components.spark.home }}/scripts/
+COPY --chmod=755 scripts/spark/create_spark_defaults.py {{ components.spark.home }}/scripts/
+COPY --chmod=755 scripts/spark/download-jars.py {{ components.spark.home }}/scripts/
 
-# Download and install Spark
-RUN wget -q {{ urls.spark }} -O /tmp/spark.tgz \
-    && tar xzf /tmp/spark.tgz -C /opt \
-    && mv /opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION} ${SPARK_HOME} \
-    && rm /tmp/spark.tgz
-
-# Download and install Hadoop
-RUN wget -q {{ urls.hadoop }} -O /tmp/hadoop.tgz \
-    && tar xzf /tmp/hadoop.tgz -C /opt \
-    && mv /opt/hadoop-${HADOOP_VERSION} ${HADOOP_HOME} \
-    && rm /tmp/hadoop.tgz
-
-# Download and install Delta Lake
-RUN mkdir -p ${SPARK_HOME}/jars/delta \
-    && wget -q {{ urls.delta.core }} -O ${SPARK_HOME}/jars/delta/delta-core.jar \
-    && wget -q {{ urls.delta.spark }} -O ${SPARK_HOME}/jars/delta/delta-spark.jar \
-    && wget -q {{ urls.delta.storage }} -O ${SPARK_HOME}/jars/delta/delta-storage.jar
-
-# Download AWS and Hadoop dependencies
-RUN mkdir -p ${SPARK_HOME}/jars/aws \
-    && wget -q {{ urls.aws.bundle }} -O ${SPARK_HOME}/jars/aws/aws-java-sdk-bundle.jar \
-    && wget -q {{ urls.aws.s3 }} -O ${SPARK_HOME}/jars/aws/aws-java-sdk-s3.jar \
-    && wget -q {{ urls.aws.hadoop }} -O ${SPARK_HOME}/jars/aws/hadoop-aws.jar
+# Download and install components
+RUN --mount=type=cache,target=/tmp/downloads \
+    --mount=type=cache,target=/tmp/extract \
+    mkdir -p /tmp/downloads /tmp/extract && \
+    python3 {{ components.spark.home }}/scripts/download-jars.py && \
+    # Extract Spark and Hadoop
+    tar xzf /tmp/downloads/spark.tgz -C /tmp/extract && \
+    mv /tmp/extract/spark-{{ versions.spark }}-bin-without-hadoop {{ components.spark.home }} && \
+    tar xzf /tmp/downloads/hadoop.tgz -C /tmp/extract && \
+    mv /tmp/extract/hadoop-{{ versions.hadoop }} {{ components.hadoop.home }} && \
+    rm -rf /tmp/downloads/* /tmp/extract/*
 
 # Configure Spark
-COPY --chown=root:root spark-defaults.conf ${SPARK_HOME}/conf/
-COPY --chown=root:root log4j2.properties ${SPARK_HOME}/conf/
+COPY --chown=root:root conf/log4j2.xml {{ components.spark.home }}/conf/
+COPY --chmod=755 scripts/spark/create_spark_defaults.py {{ components.spark.home }}/scripts/
+RUN python3 {{ components.spark.home }}/scripts/create_spark_defaults.py
 
 # Set Spark configuration
-ENV SPARK_CONF_DIR=${SPARK_HOME}/conf
-ENV SPARK_CLASSPATH=${SPARK_HOME}/jars/delta/*:${SPARK_HOME}/jars/aws/*
+ENV SPARK_CONF_DIR={{ components.spark.home }}/conf
+ENV SPARK_CLASSPATH={{ components.spark.home }}/jars/delta/*:{{ components.spark.home }}/jars/aws/*
 
 # Configure S3/MinIO settings
-ENV AWS_ENDPOINT_URL={{ env.AWS_ENDPOINT_URL | default(components.minio.endpoint) }}
-# These must be provided via environment variables
-ENV AWS_ACCESS_KEY_ID={{ env.AWS_ACCESS_KEY_ID }}
-ENV AWS_SECRET_ACCESS_KEY={{ env.AWS_SECRET_ACCESS_KEY }}
+{% if env.AWS_ENDPOINT_URL %}
+ENV AWS_ENDPOINT_URL={{ env.AWS_ENDPOINT_URL }}
+{% else %}
+ENV AWS_ENDPOINT_URL={{ components.minio.endpoint }}
+{% endif %}
+
+# AWS credentials must be provided via environment variables at runtime
+ENV AWS_ACCESS_KEY_ID=
+ENV AWS_SECRET_ACCESS_KEY=
 
 # Configure Delta Lake
 ENV SPARK_DELTA_LOG_STORE_CLASS={{ components.spark.delta_log_store }}
-ENV SPARK_SQL_WAREHOUSE_DIR={{ env.SPARK_SQL_WAREHOUSE_DIR | default('s3a://' + components.minio.bucket + '/warehouse') }}
+{% if env.SPARK_SQL_WAREHOUSE_DIR %}
+ENV SPARK_SQL_WAREHOUSE_DIR={{ env.SPARK_SQL_WAREHOUSE_DIR }}
+{% else %}
+ENV SPARK_SQL_WAREHOUSE_DIR=s3a://{{ components.minio.bucket }}/warehouse
+{% endif %}
 
 # Configure S3A settings
 ENV SPARK_HADOOP_FS_S3A_PATH_STYLE_ACCESS={{ components.spark.s3a.path_style_access | string | lower }}
@@ -102,7 +106,7 @@ ENV SPARK_HIVE_METASTORE_URI={{ env.HIVE_METASTORE_URI }}
 RUN /opt/spark/scripts/setup-spark-user.sh
 
 # Set working directory
-WORKDIR ${SPARK_HOME}
+WORKDIR {{ components.spark.home }}
 
 # Expose ports
 EXPOSE 4040 7077 8080 8081 10000 10002
