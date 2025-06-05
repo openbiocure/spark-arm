@@ -8,9 +8,9 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 try:
-    from docker_builder.env import SparkEnv, load_spark_env
+    from docker.utils.version_config import VersionConfig
 except ImportError:
-    raise ImportError("Could not import SparkEnv. Make sure the package is installed with 'pip install -e .'")
+    raise ImportError("Could not import VersionConfig. Make sure docker/utils is in PYTHONPATH")
 
 # Configure logging
 logging.basicConfig(
@@ -20,21 +20,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def create_spark_defaults(env: Optional[SparkEnv] = None) -> None:
-    """Create spark-defaults.conf using Spark environment configuration.
+def create_spark_defaults(config: Optional[VersionConfig] = None) -> None:
+    """Create spark-defaults.conf using version configuration.
     
     Args:
-        env: SparkEnv instance. If None, will load from environment.
+        config: VersionConfig instance. If None, will load from default path.
     """
-    env = env or load_spark_env()
-    conf_dir = Path(env.SPARK_CONF_DIR)
+    config = config or VersionConfig.load()
+    spark_config = config.get_component_config('spark')
+    conf_dir = Path(spark_config['home']) / 'conf'
     conf_file = conf_dir / 'spark-defaults.conf'
     
     logger.info(f"Creating spark-defaults.conf in {conf_dir}")
     
     try:
         # Initialize Jinja2 environment
-        template_dir = Path(__file__).parent.parent.parent / 'conf'
+        template_dir = Path(__file__).parent.parent.parent / 'templates'
         jinja_env = Environment(
             loader=FileSystemLoader(str(template_dir)),
             trim_blocks=True,
@@ -43,12 +44,17 @@ def create_spark_defaults(env: Optional[SparkEnv] = None) -> None:
         
         # Load and render template
         template = jinja_env.get_template('spark-defaults.conf.j2')
-        config = template.render(env=env)
+        context = {
+            'versions': config.versions,
+            'components': config.components.model_dump(),
+            'env': os.environ
+        }
+        config_content = template.render(**context)
         
         # Write configuration
         conf_dir.mkdir(parents=True, exist_ok=True)
         with open(conf_file, 'w') as f:
-            f.write(config)
+            f.write(config_content)
         logger.info("Created spark-defaults.conf successfully")
     except Exception as e:
         logger.error(f"Failed to create spark-defaults.conf: {e}")

@@ -9,12 +9,12 @@ from typing import Optional
 
 # Add the scripts directory to Python path
 scripts_dir = Path(__file__).parent
-sys.path.append(str(scripts_dir.parent.parent.parent))
+sys.path.append(str(scripts_dir))
 
 try:
-    from docker_builder.env import SparkEnv, load_spark_env
+    from env import SparkEnv
 except ImportError:
-    raise ImportError("Could not import SparkEnv. Make sure the package is installed with 'pip install -e .'")
+    raise ImportError("Could not import SparkEnv from env.py")
 
 def setup_logging():
     """Configure logging."""
@@ -35,22 +35,25 @@ def start_worker(env: SparkEnv) -> None:
     _start_worker(env)
 
 def main() -> None:
-    """Main entrypoint."""
-    setup_logging()
-    logger = logging.getLogger(__name__)
-    
+    """Main entry point."""
     try:
+        # Setup logging
+        setup_logging()
+        logger = logging.getLogger(__name__)
+        
         # Load environment configuration
-        env = load_spark_env()
-        logger.info(f"Starting Spark {env.SPARK_NODE_TYPE} node")
+        env = SparkEnv.load()
         
         # Start appropriate node type
-        if env.SPARK_NODE_TYPE == "master":
+        node_type = env.SPARK_NODE_TYPE
+        logger.info(f"Starting Spark {node_type} node...")
+        
+        if node_type == "master":
             start_master(env)
-        elif env.SPARK_NODE_TYPE == "worker":
+        elif node_type == "worker":
             start_worker(env)
         else:
-            raise ValueError(f"Invalid SPARK_NODE_TYPE: {env.SPARK_NODE_TYPE}")
+            raise ValueError(f"Invalid node type: {node_type}")
             
     except Exception as e:
         logger.error(f"Failed to start Spark node: {e}")

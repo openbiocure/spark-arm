@@ -136,19 +136,13 @@ class DockerfileRenderer:
             
             # Copy template files
             scripts_dir = output_path / 'scripts' / component
-            conf_dir = output_path / 'conf'
             scripts_dir.mkdir(parents=True, exist_ok=True)
-            conf_dir.mkdir(exist_ok=True)
             
             # Copy scripts
             for script in (self.template_dir / 'scripts' / component).glob('*.py'):
                 shutil.copy2(script, scripts_dir / script.name)
             for script in (self.template_dir / 'scripts' / component).glob('*.sh'):
                 shutil.copy2(script, scripts_dir / script.name)
-            
-            # Copy config files
-            for conf in (self.template_dir / 'conf').glob('*'):
-                shutil.copy2(conf, conf_dir / conf.name)
             
             # Render Dockerfile
             template = self.env.get_template(template_path)

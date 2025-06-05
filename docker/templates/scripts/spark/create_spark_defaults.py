@@ -7,10 +7,15 @@ from pathlib import Path
 from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
+# Add the scripts directory to Python path
+scripts_dir = Path(__file__).parent
+import sys
+sys.path.append(str(scripts_dir))
+
 try:
-    from docker_builder.env import SparkEnv, load_spark_env
+    from env import SparkEnv
 except ImportError:
-    raise ImportError("Could not import SparkEnv. Make sure the package is installed with 'pip install -e .'")
+    raise ImportError("Could not import SparkEnv from env.py")
 
 # Configure logging
 logging.basicConfig(
@@ -26,15 +31,15 @@ def create_spark_defaults(env: Optional[SparkEnv] = None) -> None:
     Args:
         env: SparkEnv instance. If None, will load from environment.
     """
-    env = env or load_spark_env()
-    conf_dir = Path(env.SPARK_CONF_DIR)
+    env = env or SparkEnv()
+    conf_dir = Path(env.spark_conf_dir)
     conf_file = conf_dir / 'spark-defaults.conf'
     
     logger.info(f"Creating spark-defaults.conf in {conf_dir}")
     
     try:
         # Initialize Jinja2 environment
-        template_dir = Path(__file__).parent.parent.parent / 'conf'
+        template_dir = Path(__file__).parent.parent / 'conf'
         jinja_env = Environment(
             loader=FileSystemLoader(str(template_dir)),
             trim_blocks=True,
@@ -54,5 +59,5 @@ def create_spark_defaults(env: Optional[SparkEnv] = None) -> None:
         logger.error(f"Failed to create spark-defaults.conf: {e}")
         raise
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     create_spark_defaults() 

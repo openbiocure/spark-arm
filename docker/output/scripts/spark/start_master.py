@@ -7,17 +7,10 @@ import logging
 import socket
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 from dataclasses import dataclass
 
-# Add the scripts directory to Python path
-scripts_dir = Path(__file__).parent
-sys.path.append(str(scripts_dir.parent.parent.parent))
-
-try:
-    from docker_builder.env import SparkEnv, load_spark_env
-except ImportError:
-    raise ImportError("Could not import SparkEnv. Make sure the package is installed with 'pip install -e .'")
+from .env import SparkEnv
 
 # Configure logging
 logging.basicConfig(
@@ -44,19 +37,19 @@ class MasterConfig:
         # Determine master host based on environment
         if Path('/var/run/secrets/kubernetes.io/serviceaccount/token').exists():
             logger.info("Running in Kubernetes environment")
-            master_host = env.SPARK_MASTER_HOST or socket.getfqdn()
+            master_host = env.master_host or socket.getfqdn()
         else:
             logger.info("Running in local environment")
-            master_host = env.SPARK_MASTER_HOST or '0.0.0.0'
+            master_host = env.master_host
 
         return cls(
             master_host=master_host,
-            master_port=env.SPARK_MASTER_PORT,
-            master_webui_port=env.SPARK_MASTER_WEBUI_PORT,
-            master_rest_port=env.SPARK_MASTER_REST_PORT,
-            local_dirs=env.SPARK_LOCAL_DIRS,
-            java_home=env.JAVA_HOME,
-            spark_home=env.SPARK_HOME
+            master_port=env.master_port,
+            master_webui_port=env.master_webui_port,
+            master_rest_port=env.master_rest_port,
+            local_dirs=env.spark_local_dirs,
+            java_home=env.java_home,
+            spark_home=env.spark_home
         )
 
     def setup_directories(self) -> None:
@@ -98,10 +91,13 @@ class MasterConfig:
             value = getattr(self, field)
             logger.info(f"{field}: {value}")
 
-def start_master(env: SparkEnv) -> None:
+def start_master(env: Optional[SparkEnv] = None) -> None:
     """Start Spark master node."""
     try:
-        # Load configuration
+        # Load environment configuration if not provided
+        env = env or SparkEnv.load()
+        
+        # Create master configuration
         config = MasterConfig.from_env(env)
         config.log_configuration()
         
@@ -121,5 +117,4 @@ def start_master(env: SparkEnv) -> None:
         sys.exit(1)
 
 if __name__ == "__main__":
-    env = load_spark_env()
-    start_master(env) 
+    start_master() 

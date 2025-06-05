@@ -9,8 +9,8 @@ ENV SPARK_VERSION={{ versions.spark }}
 ENV HADOOP_VERSION={{ versions.hadoop }}
 ENV SCALA_VERSION={{ versions.scala.version }}
 ENV SPARK_HOME={{ components.spark.home }}
-ENV HADOOP_HOME={{ components.hadoop.home }}
-ENV PATH=$PATH:{{ components.spark.home }}/bin:{{ components.hadoop.home }}/bin
+ENV HADOOP_HOME={{ components.spark.home }}
+ENV PATH=$PATH:{{ components.spark.home }}/bin
 ENV SPARK_NODE_TYPE=master
 
 # Install system dependencies with cache mounts
@@ -40,30 +40,28 @@ RUN --mount=type=cache,target=/var/cache/apt \
         wget \
         python3-pip \
         && rm -rf /var/lib/apt/lists/* && \
-    pip3 install --no-cache-dir requests
+    pip3 install --no-cache-dir requests jinja2
 
-# Create scripts directory and copy Python scripts
-COPY --chmod=755 scripts/spark/entrypoint.py {{ components.spark.home }}/scripts/
-COPY --chmod=755 scripts/spark/start_master.py {{ components.spark.home }}/scripts/
-COPY --chmod=755 scripts/spark/start_worker.py {{ components.spark.home }}/scripts/
-COPY --chmod=755 scripts/spark/create_spark_defaults.py {{ components.spark.home }}/scripts/
-COPY --chmod=755 scripts/spark/download-jars.py {{ components.spark.home }}/scripts/
+# Create scripts directory and copy all Python scripts
+COPY --chmod=755 scripts/spark/*.py {{ components.spark.home }}/scripts/
 
 # Download and install components
 RUN --mount=type=cache,target=/tmp/downloads \
     --mount=type=cache,target=/tmp/extract \
     mkdir -p /tmp/downloads /tmp/extract && \
     python3 {{ components.spark.home }}/scripts/download-jars.py && \
-    # Extract Spark and Hadoop
+    # Extract Spark (with Hadoop included)
     tar xzf /tmp/downloads/spark.tgz -C /tmp/extract && \
-    mv /tmp/extract/spark-{{ versions.spark }}-bin-without-hadoop {{ components.spark.home }} && \
-    tar xzf /tmp/downloads/hadoop.tgz -C /tmp/extract && \
-    mv /tmp/extract/hadoop-{{ versions.hadoop }} {{ components.hadoop.home }} && \
+    mv /tmp/extract/spark-{{ versions.spark }}-bin-hadoop3 {{ components.spark.home }} && \
+    # Copy JARs to appropriate directories
+    mkdir -p {{ components.spark.home }}/jars/delta {{ components.spark.home }}/jars/aws && \
+    mv /tmp/downloads/delta-spark.jar {{ components.spark.home }}/jars/delta/ && \
+    mv /tmp/downloads/hadoop-aws.jar {{ components.spark.home }}/jars/aws/ && \
+    mv /tmp/downloads/aws-java-sdk-bundle.jar {{ components.spark.home }}/jars/aws/ && \
     rm -rf /tmp/downloads/* /tmp/extract/*
 
 # Configure Spark
-COPY --chown=root:root conf/log4j2.xml {{ components.spark.home }}/conf/
-COPY --chmod=755 scripts/spark/create_spark_defaults.py {{ components.spark.home }}/scripts/
+COPY --chown=root:root conf/* {{ components.spark.home }}/conf/
 RUN python3 {{ components.spark.home }}/scripts/create_spark_defaults.py
 
 # Set Spark configuration
@@ -103,7 +101,7 @@ ENV SPARK_HIVE_METASTORE_URI={{ env.HIVE_METASTORE_URI }}
 {% endif %}
 
 # Set up spark user and directories
-RUN /opt/spark/scripts/setup-spark-user.sh
+RUN python3 {{ components.spark.home }}/scripts/setup-spark-user.py
 
 # Set working directory
 WORKDIR {{ components.spark.home }}
