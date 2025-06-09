@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
 import yaml
-from .env import SparkEnv, load_spark_env
+from .env import SparkEnv
 
 @dataclass
 class BuilderConfig:
@@ -22,7 +22,7 @@ class BuilderConfig:
         config_path = Path(config_path)
         
         # Load environment configuration
-        env = load_spark_env()
+        env = SparkEnv.load_spark_env()
         
         return cls(
             base_dir=base_dir,
